@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "harness-gen"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "anthropic>=1.13.0",
+    "google-genai>=2.30.0",
+    "httpx>=0.28.1",
+    "langchain-anthropic>=1.7.6",
+    "langchain-core>=1.6.10",
+    "langchain-google-genai>=4.4.1",
+    "langchain-ollama>=1.1.0",
+    "langchain-openai>=1.7.1",
+    "langgraph>=1.2.15",
+    "langgraph-checkpoint-sqlite>=3.1.2",
+    "ollama>=0.6.3",
+    "openai>=3.29.0",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+harness-gen = "harness_gen.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness_gen"]

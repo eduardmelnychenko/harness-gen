@@ -1,0 +1,102 @@
+{
+  "features": [
+    {
+      "id": "requirements-conversation",
+      "name": "Natural-language requirements gathering",
+      "description": "Gather and review confirmed purpose, tasks, operating context, constraints, outputs, and setup requirements; keep material unknowns unresolved.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py collects one task-profile prompt at a time, checkpoints each answer, and supports structured review edits. tests/test_cli.py verifies the interview, review, correction, and pause/resume flow; no provider is called to formulate questions."
+      ]
+    },
+    {
+      "id": "task-type-guidance",
+      "name": "Task-type and custom-task guidance",
+      "description": "Guide software development, machine learning, data science, and custom-task conversations without overriding user requirements; require a confirmed data source and analysis goal for data science.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py uses task profiles for selected task types. tests/test_cli.py verifies that unknown data-science source and goal block provider approval; tests/test_requirements.py verifies data-science and custom-task gates."
+      ]
+    },
+    {
+      "id": "target-capability-selection",
+      "name": "Supported target selection",
+      "description": "Present supported agent targets separately from model providers, and gate compatibility and artifact generation on declared target capabilities.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py presents Claude Code and GitHub Copilot separately from the configured model provider and re-prompts when a provider name is entered as a target. Target capability and path planning tests cover target-specific formats."
+      ]
+    },
+    {
+      "id": "provider-configuration-approval",
+      "name": "Provider configuration and approval",
+      "description": "Use the configured provider through a shared interface, default to local Ollama, report configuration failures without fallback, and obtain approval before sending data to an external service.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py renders the provider disclosure and approval prompt. tests/test_cli.py verifies that declining remote Ollama stops before generation; tests/test_provider_approval.py verifies that the disclosure names the initial request, selected choices, follow-up answers, and setup details. tests/test_workflow.py verifies approval scope and endpoint changes. Live provider calls were not made."
+      ]
+    },
+    {
+      "id": "harness-instruction-generation",
+      "name": "Core harness instruction generation",
+      "description": "Generate the selected target's core instruction file and shared root AGENTS.md from reviewed, confirmed requirements without generating task implementation or project scaffolds.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/generation.py and src/harness_gen/workflow.py implement reviewed provider-backed generation. src/harness_gen/cli.py previews generated contents; tests/test_cli.py verifies a complete flow with a fake generator. Live provider calls were not made."
+      ]
+    },
+    {
+      "id": "scoped-instruction-generation",
+      "name": "Optional scoped instruction generation",
+      "description": "Generate selected task-type and path-scoped instructions only for target-supported formats and exact relative patterns supplied and confirmed by the user.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py collects optional task-type outputs and exact path patterns; requirements review confirms those patterns before generation. tests/test_workflow.py verifies exact pattern confirmation, and tests/test_generation.py covers scoped output planning."
+      ]
+    },
+    {
+      "id": "offline-output-validation",
+      "name": "Offline output validation",
+      "description": "Check safe unique paths, required confirmed details, shared-context references, and target-native formats; block writes unless all generated files pass.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/validation.py and tests/test_validation.py verify offline checks; the graph revalidates and blocks non-passing output. src/harness_gen/cli.py reports validation findings and affected paths."
+      ]
+    },
+    {
+      "id": "approved-project-writes",
+      "name": "Reviewed and approved project writes",
+      "description": "Show the destination and complete create-or-replace set, obtain approval, reject unsafe paths and symbolic links, detect stale reviews, and atomically replace approved files.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/artifact_manager.py and tests/test_artifact_manager.py verify full-set review, approval-bound snapshots, stale-draft checks, symlink rejection, per-file atomic writes, restrictive permissions, and partial-write reporting. tests/test_cli.py verifies destination review and approved writes through the CLI."
+      ]
+    },
+    {
+      "id": "session-checkpoint-lifecycle",
+      "name": "Session pause, resume, restart, and deletion",
+      "description": "Persist recoverable workflow state in a SQLite graph checkpoint; resume the active thread and restart from editable prior requirements without carrying generated files or deleting project files.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/sessions.py and tests/test_sessions.py verify SQLite persistence, permissions, restart, deletion without project-file changes, checkpoint read/write failure recovery, credential exclusion, and that legacy session rows are not imported. tests/test_cli.py verifies pause/resume during the requirements interview; tests/test_workflow.py verifies recovery across workflow decisions."
+      ]
+    },
+    {
+      "id": "data-protection-and-logging",
+      "name": "Data protection and operational logging",
+      "description": "Keep provider credentials out of saved state, generated files, and errors; disclose data handling and log operational events without raw user or provider content.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py wires per-run logging, reports database and deletion behavior, and warns that text is not scanned. tests/test_logging_config.py verifies owner-only timestamped logs and levels; tests/test_cli.py verifies raw requirements are not logged, and tests/test_sessions.py verifies provider credentials are absent from checkpoint state."
+      ]
+    },
+    {
+      "id": "line-oriented-cli",
+      "name": "Line-oriented terminal workflow",
+      "description": "Drive and resume the workflow with clear one-at-a-time prompts for requirements review, provider approval, destination selection, and write approval.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/cli.py and the harness-gen/python -m harness_gen entry points drive requirements collection, review, provider approval, generation preview, destination selection, and approved writes. tests/test_cli.py verifies complete scripted flows, remote approval decline, data-science blocking, and checkpointed pause/resume."]
+    }
+  ]
+}
