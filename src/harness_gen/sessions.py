@@ -47,6 +47,16 @@ _RESTART_FIELDS = (
     "unresolved_choices",
     "workflow_enabled",
 )
+_INTERVIEW_ASSISTANCE_FIELDS = (
+    "ai_assistance_enabled",
+    "ai_provider_approval",
+    "suggested_questions",
+    "suggestion_selection_pending",
+    "suggestion_attempts",
+    "suggestions_generated",
+    "supplemental_pending_questions",
+    "supplemental_index",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,6 +371,12 @@ class SessionManager:
                 for key in _RESTART_FIELDS
                 if key in previous_state
             }
+            interview_data = seed.get("interview_data")
+            if isinstance(interview_data, Mapping):
+                editable_interview = dict(interview_data)
+                for key in _INTERVIEW_ASSISTANCE_FIELDS:
+                    editable_interview.pop(key, None)
+                seed["interview_data"] = editable_interview
             workflow_enabled = seed.get("workflow_enabled") is True
             if workflow_enabled and isinstance(seed.get("requirements"), Mapping):
                 try:

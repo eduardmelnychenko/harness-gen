@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import unittest
 from collections.abc import Sequence
+from dataclasses import replace
+import unittest
 
 import httpx
 
@@ -17,6 +18,7 @@ from harness_gen.requirements import (
     ConfirmedPathPattern,
     RequirementValue,
     RequirementsDraft,
+    SupplementalAnswer,
     SetupRequirements,
     TaskAnswer,
 )
@@ -135,7 +137,15 @@ class GenerationTests(unittest.TestCase):
         self.assertIn('applyTo: "src/**/*.py"', plan.artifacts[-1].frontmatter)
 
     def test_generates_and_validates_the_complete_file_set(self) -> None:
-        requirements = _requirements()
+        requirements = replace(
+            _requirements(),
+            supplemental_answers=(
+                SupplementalAnswer(
+                    "Which API versions must remain compatible?",
+                    "Keep version 1 supported.",
+                ),
+            ),
+        )
         plan = plan_generation(requirements)
         model = FakeChatModel([_response(plan)])
         settings = ProviderSettings.from_environment({})
@@ -150,6 +160,8 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(len(result.files), len(plan.artifacts))
         prompt = model.runnable.calls[0][1].content
         self.assertIn("Support safe API updates.", prompt)
+        self.assertIn("Which API versions must remain compatible?", prompt)
+        self.assertIn("Keep version 1 supported.", prompt)
         self.assertNotIn(requirements.request, prompt)
         path_file = next(
             item

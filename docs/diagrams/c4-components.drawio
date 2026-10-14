@@ -1,0 +1,175 @@
+<mxfile host="drawio-plugin" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" modified="2026-10-14T10:04:29.732Z" etag="AvMsWplTk1Odp2j37slZ" version="22.1.22" type="embed">
+  <diagram id="c4-components" name="CLI Components">
+    <mxGraphModel dx="1519" dy="989" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Harness Generator — C4 Components (Interactive CLI)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#1f2937;" parent="1" vertex="1">
+          <mxGeometry x="35" y="20" width="1050" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="system-boundary" value="Harness Generator [Software System]" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#1168bd;fontColor=#1168bd;fontStyle=1;verticalAlign=top;align=left;spacingTop=10;spacingLeft=12;" parent="1" vertex="1">
+          <mxGeometry x="230" y="75" width="900" height="805" as="geometry" />
+        </mxCell>
+        <mxCell id="cli-boundary" value="Interactive CLI [Container: Python 3.14+]" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=4 3;fillColor=none;strokeColor=#438dd5;fontColor=#2e6da4;fontStyle=1;verticalAlign=top;align=left;spacingTop=10;spacingLeft=12;" parent="1" vertex="1">
+          <mxGeometry x="255" y="105" width="850" height="590" as="geometry" />
+        </mxCell>
+        <mxCell id="author" value="Harness Author&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;[Person]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;fontColor=#ffffff;strokeColor=#052e56;fontSize=15;align=center;verticalAlign=middle;spacing=8;" parent="1" vertex="1">
+          <mxGeometry x="25" y="345" width="165" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="terminal" value="Terminal Interface&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: cli.py]&lt;br&gt;Prompts, reviews, previews&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="285" y="145" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="interview" value="Requirements Interview&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Components: question_templates.py, requirements.py]&lt;br&gt;Deterministic questions and confirmed answers&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="545" y="145" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="assistance" value="Optional Interview Assistance&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: interview_assistance.py]&lt;br&gt;Validated suggestions and advice-only coaching&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="835" y="145" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="sessions" value="Session Manager&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: sessions.py]&lt;br&gt;Active thread lifecycle and checkpoint access&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="285" y="295" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="workflow" value="LangGraph Workflow&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: workflow.py]&lt;br&gt;Routes reviewed, resumable workflow steps&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="545" y="295" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="provider-approval" value="Provider Approval&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: provider_approval.py]&lt;br&gt;Disclosure and external-request gate&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="835" y="295" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="generator" value="Generation Planner and Generator&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: generation.py]&lt;br&gt;Plans supported paths; generates file content&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="285" y="445" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="validator" value="Offline Validator&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: validation.py]&lt;br&gt;Checks paths, content, and target formats&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="545" y="445" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="artifact-manager" value="Artifact Manager&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: artifact_manager.py]&lt;br&gt;Snapshots, reviews, and approved writes&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="835" y="445" width="230" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="adapters" value="Provider Adapters&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Component: providers/adapters.py]&lt;br&gt;Shared LangChain model interface&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#2e6da4;fontSize=14;align=center;verticalAlign=middle;spacing=7;" parent="1" vertex="1">
+          <mxGeometry x="545" y="575" width="230" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="checkpoint" value="Session Checkpoint&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Container: SQLite / LangGraph checkpointer]&lt;br&gt;Workflow state and pending interrupts&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#5ba85b;fontColor=#ffffff;strokeColor=#3d7d3d;fontSize=14;align=center;verticalAlign=middle;spacing=8;" parent="1" vertex="1">
+          <mxGeometry x="315" y="740" width="245" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="logs" value="Operational Logs&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;[Container: Timestamped files]&lt;br&gt;Operational events only&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#5ba85b;fontColor=#ffffff;strokeColor=#3d7d3d;fontSize=14;align=center;verticalAlign=middle;spacing=8;" parent="1" vertex="1">
+          <mxGeometry x="635" y="740" width="225" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="provider" value="Configured LLM Provider&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;[External Software System]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#ffffff;strokeColor=#666666;fontSize=15;align=center;verticalAlign=middle;spacing=8;" parent="1" vertex="1">
+          <mxGeometry x="1190" y="280" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="workspace" value="Selected Project Workspace&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;[External System]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#ffffff;strokeColor=#666666;fontSize=15;align=center;verticalAlign=middle;spacing=8;" parent="1" vertex="1">
+          <mxGeometry x="1190" y="500" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-author-terminal" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=12;labelBackgroundColor=#ffffff;" parent="1" source="author" target="terminal" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-terminal-interview" value="Collects answers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="terminal" target="interview" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="500" y="195" />
+              <mxPoint x="500" y="270" />
+              <mxPoint x="660" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-terminal-assistance" value="Optional opt-in" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="terminal" target="assistance" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="385" y="125" />
+              <mxPoint x="950" y="125" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-terminal-sessions" value="Starts or resumes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="terminal" target="sessions" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-sessions-workflow" value="Invokes graph" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="sessions" target="workflow" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-workflow-generator" value="Reviewed requirements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="workflow" target="generator" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="345" />
+              <mxPoint x="520" y="495" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-generator-validator" value="Generated files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="generator" target="validator" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-validator-workflow" value="Findings and status" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="validator" target="workflow" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-workflow-artifact" value="Passing output and approvals" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="workflow" target="artifact-manager" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-assistance-approval" value="Authorized request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="assistance" target="provider-approval" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-workflow-approval" value="Generation disclosure" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="workflow" target="provider-approval" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-approval-adapters" value="After required approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="provider-approval" target="adapters" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="430" />
+              <mxPoint x="790" y="430" />
+              <mxPoint x="790" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-assistance-adapters" value="Suggestions or coaching" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="assistance" target="adapters" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="950" y="265" />
+              <mxPoint x="1100" y="265" />
+              <mxPoint x="1100" y="620" />
+              <mxPoint x="775" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-generator-adapters" value="Structured generation request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="generator" target="adapters" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="385" y="595" />
+              <mxPoint x="520" y="595" />
+              <mxPoint x="520" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-sessions-checkpoint" value="Persists graph state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="sessions" target="checkpoint" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="270" y="345" />
+              <mxPoint x="270" y="710" />
+              <mxPoint x="435" y="710" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-terminal-logs" value="Operational events" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=11;labelBackgroundColor=#ffffff;" parent="1" source="terminal" target="logs" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="240" y="195" />
+              <mxPoint x="240" y="795" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-adapters-provider" value="Authorized model requests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=12;labelBackgroundColor=#ffffff;" parent="1" source="adapters" target="provider" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1120" y="620" />
+              <mxPoint x="1150" y="620" />
+              <mxPoint x="1150" y="335" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rel-artifact-workspace" value="Applies approved files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#34495e;fontSize=12;labelBackgroundColor=#ffffff;" parent="1" source="artifact-manager" target="workspace" edge="1">
+          <mxGeometry x="0.2703" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scope" value="Provider credentials stay in runtime configuration. Project writes follow validation, destination review, and full-set user approval." style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontColor=#4b5563;" parent="1" vertex="1">
+          <mxGeometry x="260" y="890" width="1190" height="35" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

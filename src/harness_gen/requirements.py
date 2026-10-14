@@ -9,7 +9,8 @@ from enum import StrEnum
 from harness_gen.errors import RequirementsError
 from harness_gen.path_rules import validate_relative_glob
 from harness_gen.targets import AgentTarget
-from harness_gen.tasks import TASK_PROFILES, TaskType
+from harness_gen.question_templates import TASK_PROFILES
+from harness_gen.tasks import TaskType
 
 
 class CustomTaskSupport(StrEnum):
@@ -54,6 +55,18 @@ class TaskAnswer:
 
 
 @dataclass(frozen=True, slots=True)
+class SupplementalAnswer:
+    question: str = field(repr=False)
+    answer: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not self.question.strip() or not self.answer.strip():
+            raise RequirementsError(
+                "A supplemental answer must include its question and answer."
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class SetupRequirements:
     platform: RequirementValue | None = None
     runtime: RequirementValue | None = None
@@ -82,6 +95,7 @@ class RequirementsDraft:
     target: AgentTarget | None = None
     operating_context: RequirementValue | None = None
     task_answers: tuple[TaskAnswer, ...] = ()
+    supplemental_answers: tuple[SupplementalAnswer, ...] = ()
     constraints: tuple[RequirementValue, ...] = ()
     desired_outputs: tuple[RequirementValue, ...] = ()
     setup: SetupRequirements = field(default_factory=SetupRequirements)
@@ -99,6 +113,11 @@ class RequirementsDraft:
         task_answer_keys = [item.key for item in self.task_answers]
         if len(set(task_answer_keys)) != len(task_answer_keys):
             raise RequirementsError("Each task answer field must be unique.")
+        supplemental_questions = [
+            item.question.casefold().strip() for item in self.supplemental_answers
+        ]
+        if len(set(supplemental_questions)) != len(supplemental_questions):
+            raise RequirementsError("Each supplemental question must be unique.")
         patterns = [item.pattern for item in self.path_patterns]
         if len(set(patterns)) != len(patterns):
             raise RequirementsError("Each path-scoped glob pattern must be unique.")
@@ -249,6 +268,10 @@ def requirements_to_state(draft: RequirementsDraft) -> dict[str, object]:
             }
             for item in draft.task_answers
         ],
+        "supplemental_answers": [
+            {"question": item.question, "answer": item.answer}
+            for item in draft.supplemental_answers
+        ],
         "constraints": [
             _requirement_value_to_state(item) for item in draft.constraints
         ],
@@ -293,26 +316,31 @@ def requirements_from_state(
 ) -> RequirementsDraft:
     """Rebuild a requirements draft from its checkpoint representation."""
     try:
-        _require_state_keys(
-            values,
-            {
-                "request",
-                "purpose",
-                "requirements_reviewed",
-                "task_types",
-                "target",
-                "operating_context",
-                "task_answers",
-                "constraints",
-                "desired_outputs",
-                "setup",
-                "unresolved_choices",
-                "task_type_instructions",
-                "path_scoped_instructions",
-                "path_patterns",
-                "custom_task_support",
-            },
-        )
+        requirement_keys = {
+            "request",
+            "purpose",
+            "requirements_reviewed",
+            "task_types",
+            "target",
+            "operating_context",
+            "task_answers",
+            "supplemental_answers",
+            "constraints",
+            "desired_outputs",
+            "setup",
+            "unresolved_choices",
+            "task_type_instructions",
+            "path_scoped_instructions",
+            "path_patterns",
+            "custom_task_support",
+        }
+        legacy_requirement_keys = requirement_keys - {"supplemental_answers"}
+        saved_keys = frozenset(values)
+        if saved_keys not in {
+            frozenset(requirement_keys),
+            frozenset(legacy_requirement_keys),
+        }:
+            raise TypeError("The saved requirements have unsupported fields.")
         setup = _state_mapping(values["setup"])
         _require_state_keys(
             setup,
@@ -348,6 +376,10 @@ def requirements_from_state(
             task_answers=tuple(
                 _task_answer_from_state(item)
                 for item in _state_list(values.get("task_answers", []))
+            ),
+            supplemental_answers=tuple(
+                _supplemental_answer_from_state(item)
+                for item in _state_list(values.get("supplemental_answers", []))
             ),
             constraints=tuple(
                 _required_requirement_value(item)
@@ -441,6 +473,15 @@ def _task_answer_from_state(value: object) -> TaskAnswer:
         key=_state_string(data["key"]),
         value=_optional_state_string(data["value"]),
         confirmed=_state_bool(data["confirmed"]),
+    )
+
+
+def _supplemental_answer_from_state(value: object) -> SupplementalAnswer:
+    data = _state_mapping(value)
+    _require_state_keys(data, {"question", "answer"})
+    return SupplementalAnswer(
+        question=_state_string(data["question"]),
+        answer=_state_string(data["answer"]),
     )
 
 

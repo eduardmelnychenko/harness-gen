@@ -6,7 +6,16 @@
       "description": "Gather and review confirmed purpose, tasks, operating context, constraints, outputs, and setup requirements; keep material unknowns unresolved.",
       "status": "pass",
       "evidence": [
-        "src/harness_gen/cli.py collects one task-profile prompt at a time, checkpoints each answer, and supports structured review edits. tests/test_cli.py verifies the interview, review, correction, and pause/resume flow; no provider is called to formulate questions."
+        "src/harness_gen/question_templates.py contains the deterministic prompts and task profiles. src/harness_gen/cli.py checkpoints the interview and supports structured review edits. tests/test_cli.py verifies deterministic collection, review, correction, and pause/resume; tests/test_requirements.py verifies supplemental answers do not satisfy readiness gates."
+      ]
+    },
+    {
+      "id": "optional-llm-interview-assistance",
+      "name": "Optional LLM interview assistance",
+      "description": "Offer user-approved LLM coaching and validated optional follow-up questions without changing deterministic questions or readiness gates.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/interview_assistance.py validates up to three optional questions and provides advice-only coaching. src/harness_gen/cli.py requires :ai opt-in, discloses the provider, requests external approval, lets the user choose suggestions, and stores supplemental answers separately. tests/test_cli.py covers selection, coaching without answer mutation, and external-provider decline; tests/test_interview_assistance.py covers suggestion validation."
       ]
     },
     {
@@ -97,6 +106,15 @@
       "status": "pass",
       "evidence": [
         "src/harness_gen/cli.py and the harness-gen/python -m harness_gen entry points drive requirements collection, review, provider approval, generation preview, destination selection, and approved writes. tests/test_cli.py verifies complete scripted flows, remote approval decline, data-science blocking, and checkpointed pause/resume."]
+    },
+    {
+      "id": "c4-architecture-diagrams",
+      "name": "C4 architecture diagrams",
+      "description": "Provide editable system context, container, and component diagrams that reflect the implemented Harness Generator architecture.",
+      "status": "pass",
+      "evidence": [
+        "docs/diagrams/c4-context.drawio, docs/diagrams/c4-containers.drawio, and docs/diagrams/c4-components.drawio provide the three C4 levels documented in docs/architecture-diagrams.md. Python XML parsing verified all three files and their cell references; visual rendering was not available."
+      ]
     }
   ]
 }

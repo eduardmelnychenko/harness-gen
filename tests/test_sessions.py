@@ -253,6 +253,20 @@ class SessionPersistenceTests(unittest.TestCase):
                         "target_agent": "github_copilot",
                         "task_type_instructions": True,
                         "path_patterns": ["src/**/*.py"],
+                        "interview_data": {
+                            "answers": {"purpose": "Maintain the API."},
+                            "ai_assistance_enabled": True,
+                            "ai_provider_approval": {
+                                "provider": "openai",
+                                "endpoint_fingerprint": "approved-endpoint",
+                            },
+                            "supplemental_answers": [
+                                {
+                                    "question": "Which API versions matter?",
+                                    "answer": "Version 1.",
+                                }
+                            ],
+                        },
                         "requirements_reviewed": True,
                         "provider_approval": {
                             "provider": "ollama",
@@ -282,6 +296,15 @@ class SessionPersistenceTests(unittest.TestCase):
                 self.assertEqual(state["path_patterns"], ["src/**/*.py"])
                 self.assertFalse(state["requirements_reviewed"])
                 self.assertEqual(state["phase"], "checkpoint")
+                self.assertNotIn(
+                    "ai_assistance_enabled",
+                    state["interview_data"],
+                )
+                self.assertNotIn("ai_provider_approval", state["interview_data"])
+                self.assertEqual(
+                    state["interview_data"]["supplemental_answers"][0]["answer"],
+                    "Version 1.",
+                )
                 for cleared_key in (
                     "provider_approval",
                     "generated_files",

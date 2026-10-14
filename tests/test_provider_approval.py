@@ -7,6 +7,7 @@ from harness_gen.errors import ProviderApprovalRequired, RequirementsIncompleteE
 from harness_gen.provider_approval import (
     authorize_provider_request,
     create_authorized_chat_model,
+    create_authorized_interview_chat_model,
     describe_provider,
     record_provider_approval,
 )
@@ -115,6 +116,24 @@ class ProviderApprovalTests(unittest.TestCase):
             create_authorized_chat_model(settings, _requirements(), None)
 
         model = create_authorized_chat_model(settings, _requirements(), approval)
+        self.assertEqual(type(model).__name__, "ChatOpenAI")
+
+    def test_interview_model_factory_requires_its_own_external_approval(self) -> None:
+        settings = ProviderSettings.from_environment(
+            {
+                "HARNESS_LLM_PROVIDER": "openai",
+                "HARNESS_LLM_MODEL": "test-model",
+                "OPENAI_API_KEY": "test-key",
+            }
+        )
+        approval = record_provider_approval(
+            describe_provider(settings), approved=True
+        )
+
+        with self.assertRaises(ProviderApprovalRequired):
+            create_authorized_interview_chat_model(settings, None)
+
+        model = create_authorized_interview_chat_model(settings, approval)
         self.assertEqual(type(model).__name__, "ChatOpenAI")
 
     def test_remote_ollama_requires_approval(self) -> None:

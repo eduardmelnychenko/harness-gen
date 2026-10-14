@@ -70,3 +70,25 @@
 - Updated `docs/ARCHITECTURE.md` with verification commands, tested safety boundaries, and the limits of offline and live-provider verification. Updated `feature_list.json` with evidence for the integrated checks.
 - Validation: all 92 unit tests passed; Python compilation, changed-file line-length checks, `feature_list.json` parsing, `git diff --check`, `uv lock --check`, and `uv build` passed.
 - Not run: live model-provider requests or provider-retention verification.
+
+### User README
+
+- Added `README.md` with the product's user value, supported use cases and targets, local installation and run steps, provider configuration, session controls, deployment model, and data-handling and validation limits.
+- Validation: documentation-only change; no application tests run.
+
+### Hybrid interview assistance
+
+- Moved deterministic core prompts and task-profile question data into `src/harness_gen/question_templates.py`, separate from optional model-assistance behavior.
+- Added explicit `:ai` opt-in with provider disclosure and external-provider approval, `:suggest` for up to three validated optional questions selected by the user, and `? <question>` coaching for open-ended deterministic prompts. Supplemental answers are checkpointed and included in review and generation context, but remain separate from readiness gates. Coaching does not alter user answers, and restart clears model-consent state.
+- Updated product, architecture, and user documentation and added feature inventory evidence. Added CLI, suggestion-validation, readiness-gate, generation-context, legacy-checkpoint, and restart-consent tests.
+- Validation: all 101 unit tests passed; Python compilation, changed-file line-length checks, `feature_list.json` parsing, `git diff --check`, `uv lock --check`, and `uv build` passed.
+- Not run: live model-provider requests.
+
+## 2026-10-14
+
+### C4 architecture diagrams
+
+- Added editable draw.io diagrams for system context, containers, and CLI components in `docs/diagrams/`. They show the local CLI, checkpoint database, operational logs, configured LLM provider, selected project workspace, and approval-gated flows.
+- Added the `c4-architecture-diagrams` feature record; the diagrams are indexed by `docs/architecture-diagrams.md`.
+- Validation: Python XML parsing confirmed all three draw.io files are valid XML with unique cell IDs and valid cell references; all three documented diagram paths exist.
+- Not run: visual rendering or interaction/layout inspection because a draw.io renderer was not available.

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from harness_gen.tasks import TASK_PROFILES, TaskType, task_profile
+from harness_gen.question_templates import TASK_PROFILES, task_profile
+from harness_gen.tasks import TaskType
 
 
 class TaskProfileTests(unittest.TestCase):

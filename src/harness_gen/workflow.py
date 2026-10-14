@@ -671,6 +671,7 @@ def _requirements_summary(
         "target": values["target"],
         "operating_context": values["operating_context"],
         "task_answers": values["task_answers"],
+        "supplemental_answers": values["supplemental_answers"],
         "constraints": values["constraints"],
         "desired_outputs": values["desired_outputs"],
         "setup": values["setup"],

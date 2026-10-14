@@ -144,3 +144,20 @@ def create_authorized_chat_model(
     from harness_gen.providers.adapters import _build_chat_model
 
     return _build_chat_model(settings)
+
+
+def create_authorized_interview_chat_model(
+    settings: ProviderSettings,
+    approval: ProviderApproval | None,
+) -> BaseChatModel:
+    """Create a chat model after the interview disclosure/approval gate."""
+    disclosure = describe_provider(settings)
+    if disclosure.requires_approval and (
+        approval is None
+        or approval.provider is not disclosure.provider
+        or approval._scope != disclosure._approval_scope
+    ):
+        raise ProviderApprovalRequired()
+    from harness_gen.providers.adapters import _build_chat_model
+
+    return _build_chat_model(settings)

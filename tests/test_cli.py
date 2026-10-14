@@ -3,13 +3,19 @@ from __future__ import annotations
 import logging
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from harness_gen.cli import run_cli
 from harness_gen.artifacts import GeneratedFile, GenerationResult
 from harness_gen.config import ProviderSettings
 from harness_gen.generation import plan_generation
-from harness_gen.requirements import RequirementsDraft, requirements_to_state
+from harness_gen.requirements import (
+    RequirementsDraft,
+    requirements_from_state,
+    requirements_to_state,
+)
+from harness_gen.sessions import DatabaseSettings, SessionManager
 from harness_gen.targets import ArtifactKind
 from harness_gen.validation import validate_generated_files
 
@@ -64,6 +70,34 @@ class CountingGenerator(FixedGenerator):
     ) -> GenerationResult:
         self.calls += 1
         return super().generate(requirements, provider_settings, approval)
+
+
+class FixedInterviewAssistant:
+    def __init__(self) -> None:
+        self.suggestion_calls = 0
+        self.coaching_calls = 0
+
+    def suggest_questions(
+        self,
+        settings: ProviderSettings,
+        approval: object,
+        request: str,
+        answers: object,
+        deterministic_questions: object,
+    ) -> tuple[str, ...]:
+        self.suggestion_calls += 1
+        return ("Which API versions must remain compatible?",)
+
+    def coach(
+        self,
+        settings: ProviderSettings,
+        approval: object,
+        request: str,
+        active_question: str,
+        user_question: str,
+    ) -> str:
+        self.coaching_calls += 1
+        return "Name the users, their goal, and the success measure."
 
 
 class CommandLineTests(unittest.TestCase):
@@ -194,6 +228,154 @@ class CommandLineTests(unittest.TestCase):
 
             self.assertEqual(second_result, 0, output)
             self.assertTrue((destination / "AGENTS.md").is_file(), output)
+
+    def test_optional_questions_are_selected_and_stored_as_supplemental(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            database = root / "session.db"
+            assistant = FixedInterviewAssistant()
+            answers = iter(
+                [
+                    "Create API instructions.",
+                    ":ai",
+                    ":suggest",
+                    "1",
+                    "Keep version 1 supported.",
+                    "Maintain the public API.",
+                    "1",
+                    "1",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "HTTP endpoints",
+                    "Python",
+                    "Unit tests",
+                    "",
+                    "n",
+                    "n",
+                    "p",
+                ]
+            )
+            output: list[str] = []
+            with patch(
+                "harness_gen.cli.InterviewAssistant", return_value=assistant
+            ):
+                result = run_cli(
+                    input_fn=_input_from(answers),
+                    output_fn=output.append,
+                    cwd=root,
+                    environ={"HARNESS_DB_URL": f"sqlite:///{database}"},
+                    generator=FixedGenerator(),
+                )
+
+            self.assertEqual(result, 0, output)
+            self.assertEqual(assistant.suggestion_calls, 1)
+            self.assertTrue(
+                any("not readiness questions" in line for line in output)
+            )
+            with SessionManager(
+                DatabaseSettings.from_environment(
+                    {"HARNESS_DB_URL": f"sqlite:///{database}"}
+                ),
+                generator=FixedGenerator(),
+            ) as manager:
+                state = manager.state()
+                draft = requirements_from_state(state["requirements"])
+            self.assertEqual(len(draft.supplemental_answers), 1)
+            self.assertEqual(
+                draft.supplemental_answers[0].answer,
+                "Keep version 1 supported.",
+            )
+            self.assertTrue(draft.ready_for_generation is False)
+            self.assertEqual(
+                draft.generation_blockers,
+                ("Review and confirm the requirements before generation.",),
+            )
+
+    def test_coaching_does_not_replace_the_user_answer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            database = root / "session.db"
+            assistant = FixedInterviewAssistant()
+            answers = iter(
+                [
+                    "Create API instructions.",
+                    ":ai",
+                    "? How should I structure this answer?",
+                    "Maintain the public API.",
+                    ":pause",
+                ]
+            )
+            output: list[str] = []
+            with patch(
+                "harness_gen.cli.InterviewAssistant", return_value=assistant
+            ):
+                result = run_cli(
+                    input_fn=_input_from(answers),
+                    output_fn=output.append,
+                    cwd=root,
+                    environ={"HARNESS_DB_URL": f"sqlite:///{database}"},
+                    generator=FixedGenerator(),
+                )
+
+            self.assertEqual(result, 0, output)
+            self.assertEqual(assistant.coaching_calls, 1)
+            self.assertTrue(
+                any("your answer is unchanged" in line for line in output)
+            )
+            with SessionManager(
+                DatabaseSettings.from_environment(
+                    {"HARNESS_DB_URL": f"sqlite:///{database}"}
+                ),
+                generator=FixedGenerator(),
+            ) as manager:
+                state = manager.state()
+            interview = state["interview_data"]
+            self.assertEqual(
+                interview["answers"]["purpose"],
+                "Maintain the public API.",
+            )
+
+    def test_external_interview_assistance_requires_explicit_provider_approval(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            assistant = FixedInterviewAssistant()
+            answers = iter(
+                [
+                    "Create API instructions.",
+                    ":ai",
+                    "n",
+                    ":pause",
+                ]
+            )
+            output: list[str] = []
+            with patch(
+                "harness_gen.cli.InterviewAssistant", return_value=assistant
+            ):
+                result = run_cli(
+                    input_fn=_input_from(answers),
+                    output_fn=output.append,
+                    cwd=root,
+                    environ={
+                        "HARNESS_DB_URL": f"sqlite:///{root / 'session.db'}",
+                        "HARNESS_OLLAMA_BASE_URL": "https://models.example.test",
+                    },
+                    generator=FixedGenerator(),
+                )
+
+            self.assertEqual(result, 0, output)
+            self.assertEqual(assistant.suggestion_calls, 0)
+            self.assertEqual(assistant.coaching_calls, 0)
+            self.assertTrue(
+                any("The request will go to Ollama" in line for line in output)
+            )
+            self.assertTrue(
+                any("No model request was sent" in line for line in output)
+            )
 
     def test_remote_provider_decline_stops_before_generation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -8,6 +8,7 @@ from harness_gen.requirements import (
     CustomTaskSupport,
     RequirementValue,
     RequirementsDraft,
+    SupplementalAnswer,
     SetupRequirements,
     TaskAnswer,
     requirements_from_state,
@@ -189,6 +190,12 @@ class RequirementsDraftTests(unittest.TestCase):
             target=AgentTarget.GITHUB_COPILOT,
             operating_context=RequirementValue("Existing service", True),
             task_answers=(TaskAnswer("evaluation", "Use F1 score", True),),
+            supplemental_answers=(
+                SupplementalAnswer(
+                    "Which API version must remain compatible?",
+                    "Version 1 must remain compatible.",
+                ),
+            ),
             constraints=(RequirementValue("No downtime", True),),
             desired_outputs=(RequirementValue("Test plan", True),),
             setup=SetupRequirements(
@@ -207,6 +214,42 @@ class RequirementsDraftTests(unittest.TestCase):
         self.assertEqual(
             requirements_from_state(requirements_to_state(draft)),
             draft,
+        )
+
+    def test_supplemental_answers_do_not_satisfy_readiness_gates(self) -> None:
+        draft = RequirementsDraft(
+            request="Create a data analysis harness.",
+            task_types=(TaskType.DATA_SCIENCE,),
+            target=AgentTarget.CLAUDE_CODE,
+            supplemental_answers=(
+                SupplementalAnswer(
+                    "Which data source will the analysis use?",
+                    "The sales database.",
+                ),
+                SupplementalAnswer(
+                    "What question must the analysis answer?",
+                    "Compare monthly totals.",
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            draft.data_science_blockers,
+            (
+                "Confirm the data source for the analysis.",
+                "Confirm the goal of the analysis.",
+            ),
+        )
+
+    def test_legacy_checkpoint_without_supplemental_answers_still_loads(self) -> None:
+        values = requirements_to_state(
+            RequirementsDraft(request="Create project instructions.")
+        )
+        values.pop("supplemental_answers")
+
+        self.assertEqual(
+            requirements_from_state(values).supplemental_answers,
+            (),
         )
 
     def test_checkpoint_serialization_rejects_unrecognized_fields(self) -> None:

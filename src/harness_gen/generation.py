@@ -38,7 +38,7 @@ from harness_gen.provider_approval import (
 )
 from harness_gen.requirements import RequirementValue, RequirementsDraft
 from harness_gen.targets import AgentTarget, ArtifactKind, target_capability
-from harness_gen.tasks import task_profile
+from harness_gen.question_templates import task_profile
 from harness_gen.validation import validate_generated_response
 
 MAX_GENERATION_ATTEMPTS = 3
@@ -228,6 +228,10 @@ def _generation_prompt(plan: GenerationPlan) -> str:
                 {"key": item.key, "answer": item.confirmed_value}
                 for item in requirements.task_answers
                 if item.confirmed_value is not None
+            ],
+            "optional_supplemental_answers": [
+                {"question": item.question, "answer": item.answer}
+                for item in requirements.supplemental_answers
             ],
             "task_types": [
                 task_profile(task_type).label for task_type in requirements.task_types

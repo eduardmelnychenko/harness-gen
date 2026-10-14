@@ -12,12 +12,19 @@ from dotenv import load_dotenv
 
 from harness_gen.config import ProviderSettings
 from harness_gen.errors import HarnessError, RequirementsError
+from harness_gen.interview_assistance import InterviewAssistant
 from harness_gen.logging_config import configure_logging
+from harness_gen.provider_approval import (
+    ProviderApproval,
+    describe_provider,
+    record_provider_approval,
+)
 from harness_gen.requirements import (
     ConfirmedPathPattern,
     CustomTaskSupport,
     RequirementValue,
     RequirementsDraft,
+    SupplementalAnswer,
     SetupRequirements,
     TaskAnswer,
     requirements_from_state,
@@ -25,7 +32,13 @@ from harness_gen.requirements import (
 )
 from harness_gen.sessions import DatabaseSettings, SessionManager
 from harness_gen.targets import AgentTarget, parse_agent_target
-from harness_gen.tasks import TASK_PROFILES, FollowUpQuestion, TaskType
+from harness_gen.question_templates import (
+    CORE_QUESTION_PROMPTS,
+    INTERVIEW_CHOICES,
+    TASK_PROFILES,
+    FollowUpQuestion,
+)
+from harness_gen.tasks import TaskType
 from harness_gen.workflow import GenerationRunner, HarnessWorkflowState
 
 InputFunction = Callable[[str], str]
@@ -178,6 +191,20 @@ def _drive_session(
             interview = _initial_interview_data()
             state = manager.update({"interview_data": interview})
         interview = _mapping(state.get("interview_data"))
+        if interview.get("suggestion_selection_pending") is True:
+            state, paused = _select_suggested_questions(
+                manager, state, read, write
+            )
+            if paused:
+                return 0
+            interview = _mapping(state.get("interview_data"))
+        if interview.get("supplemental_pending_questions"):
+            state, paused = _answer_supplemental_questions(
+                manager, state, read, write
+            )
+            if paused:
+                return 0
+            interview = _mapping(state.get("interview_data"))
         if interview.get("complete") is True:
             try:
                 draft = _draft_from_interview(state, interview)
@@ -210,6 +237,37 @@ def _drive_session(
             write("The saved interview step is inconsistent. Restart the session.")
             return 1
         if state.get("last_response") is not None:
+            command = state["last_response"]
+            if command == ":ai":
+                if _enable_interview_assistance(manager, interview, read, write):
+                    return 0
+                state = manager.update(
+                    {"interview_data": interview, "last_response": None}
+                )
+                continue
+            if command == ":suggest":
+                if interview.get("ai_assistance_enabled") is not True:
+                    write("Use :ai first to opt in to interview assistance.")
+                elif interview.get("suggestions_generated") is True:
+                    write("Optional questions were already generated for this session.")
+                else:
+                    _suggest_optional_questions(manager, state, interview, write)
+                interview = _mapping(manager.state().get("interview_data"))
+                state = manager.update(
+                    {"interview_data": interview, "last_response": None}
+                )
+                continue
+            if isinstance(command, str) and command.startswith("? "):
+                if interview.get("ai_assistance_enabled") is not True:
+                    write("Use :ai first to opt in to interview assistance.")
+                elif not _is_coachable_field(field):
+                    write("Coaching is available for open-ended interview questions.")
+                else:
+                    _coach_interview_answer(
+                        manager, state, field, command[2:].strip(), write
+                    )
+                state = manager.update({"last_response": None})
+                continue
             try:
                 answer = _normalize_interview_answer(field, state["last_response"])
             except (HarnessError, ValueError) as error:
@@ -243,6 +301,10 @@ def _answer_interview_prompt(
 ) -> tuple[HarnessWorkflowState, bool]:
     prompt = _mapping(state.get("pending_prompt"))
     write(str(prompt.get("message", "Enter a response.")))
+    write(
+        "Optional: enter :ai to opt in to model help, :suggest for extra questions, "
+        "or ? followed by a question for coaching."
+    )
     choices = prompt.get("choices")
     if isinstance(choices, list):
         for choice in choices:
@@ -253,6 +315,259 @@ def _answer_interview_prompt(
         write("Session paused. Resume it by running harness-gen again.")
         return state, True
     return manager.resume(answer), False
+
+
+def _enable_interview_assistance(
+    manager: SessionManager,
+    interview: dict[str, object],
+    read: InputFunction,
+    write: OutputFunction,
+) -> bool:
+    settings = manager.provider_settings
+    if settings is None:
+        write("Interview assistance is unavailable because no provider is configured.")
+        return False
+    disclosure = describe_provider(settings)
+    write("Optional interview assistance uses the configured model provider.")
+    write(disclosure.render())
+    approved = True
+    if disclosure.requires_approval:
+        choice = _read_choice(
+            "Approve this provider for interview suggestions and coaching? "
+            "[y]es/[n]o/[p]ause",
+            {"y", "n", "p"},
+            read,
+            write,
+        )
+        if choice == "p" or choice is None:
+            manager.pause()
+            write("Session paused.")
+            return True
+        approved = choice == "y"
+    if not approved:
+        write("Interview assistance was not enabled. No model request was sent.")
+        return False
+    approval = record_provider_approval(disclosure, approved=True)
+    interview["ai_assistance_enabled"] = True
+    interview["ai_provider_approval"] = (
+        None
+        if approval is None
+        else {
+            "provider": approval.provider.value,
+            "endpoint_fingerprint": disclosure._approval_scope,
+        }
+    )
+    write("Interview assistance is enabled for this session.")
+    return False
+
+
+def _suggest_optional_questions(
+    manager: SessionManager,
+    state: HarnessWorkflowState,
+    interview: dict[str, object],
+    write: OutputFunction,
+) -> None:
+    settings = manager.provider_settings
+    if settings is None:
+        write("Interview assistance is unavailable because no provider is configured.")
+        return
+    attempts = _integer(interview.get("suggestion_attempts", 0))
+    if attempts >= 3:
+        write("No more model suggestion attempts are available in this interview.")
+        return
+    interview["suggestion_attempts"] = attempts + 1
+    manager.update({"interview_data": interview, "last_response": None})
+    try:
+        approval = _interview_approval(interview, settings)
+        answers = _mapping(interview.get("answers"))
+        questions = InterviewAssistant().suggest_questions(
+            settings,
+            approval,
+            str(state.get("request", "")),
+            answers,
+            _deterministic_question_texts(),
+        )
+    except HarnessError as error:
+        write(f"Optional questions are unavailable: {error}")
+        return
+    interview["suggestions_generated"] = True
+    interview["suggested_questions"] = list(questions)
+    manager.update({"interview_data": interview, "last_response": None})
+    if not questions:
+        write("The model found no useful additional questions.")
+        return
+    interview["suggestion_selection_pending"] = True
+    manager.update({"interview_data": interview, "last_response": None})
+
+
+def _select_suggested_questions(
+    manager: SessionManager,
+    state: HarnessWorkflowState,
+    read: InputFunction,
+    write: OutputFunction,
+) -> tuple[HarnessWorkflowState, bool]:
+    interview = _mapping(state.get("interview_data"))
+    questions = _string_list(interview.get("suggested_questions"))
+    if not questions:
+        interview["suggestion_selection_pending"] = False
+        return manager.update({"interview_data": interview}), False
+    write("Optional model-suggested questions (not readiness questions):")
+    for index, question in enumerate(questions, 1):
+        write(f"  {index}. {question}")
+    while True:
+        selection = _read_line(
+            "Choose questions to answer by number (comma-separated), "
+            "or leave blank to skip: ",
+            read,
+            write,
+        )
+        if selection is None or selection in {_PAUSE_COMMAND, _EXIT_COMMAND}:
+            manager.pause()
+            write("Session paused.")
+            return state, True
+        try:
+            selected = _parse_suggestion_selection(selection, len(questions))
+        except ValueError as error:
+            write(str(error))
+            continue
+        interview["suggestion_selection_pending"] = False
+        interview["supplemental_pending_questions"] = [
+            questions[index - 1] for index in selected
+        ]
+        interview["supplemental_index"] = 0
+        if not isinstance(interview.get("supplemental_answers"), list):
+            interview["supplemental_answers"] = []
+        updated = manager.update({"interview_data": interview})
+        return _answer_supplemental_questions(manager, updated, read, write)
+
+
+def _answer_supplemental_questions(
+    manager: SessionManager,
+    state: HarnessWorkflowState,
+    read: InputFunction,
+    write: OutputFunction,
+) -> tuple[HarnessWorkflowState, bool]:
+    interview = _mapping(state.get("interview_data"))
+    questions = _string_list(interview.get("supplemental_pending_questions"))
+    index = _integer(interview.get("supplemental_index", 0))
+    answers = interview.get("supplemental_answers")
+    if not isinstance(answers, list):
+        answers = []
+    while index < len(questions):
+        write(f"Optional question: {questions[index]}")
+        answer = _read_line("Your answer (blank to skip): ", read, write)
+        if answer is None or answer in {_PAUSE_COMMAND, _EXIT_COMMAND}:
+            interview["supplemental_index"] = index
+            manager.update({"interview_data": interview})
+            manager.pause()
+            write("Session paused.")
+            return manager.state(), True
+        if answer:
+            answers.append({"question": questions[index], "answer": answer})
+        index += 1
+        interview["supplemental_answers"] = answers
+        interview["supplemental_index"] = index
+        state = manager.update({"interview_data": interview})
+    interview["supplemental_pending_questions"] = []
+    interview["supplemental_index"] = 0
+    return manager.update({"interview_data": interview}), False
+
+
+def _coach_interview_answer(
+    manager: SessionManager,
+    state: HarnessWorkflowState,
+    field: str,
+    user_question: str,
+    write: OutputFunction,
+) -> None:
+    if not user_question:
+        write("Add a question after '?', for example: ? What details should I include?")
+        return
+    settings = manager.provider_settings
+    if settings is None:
+        write("Interview coaching is unavailable because no provider is configured.")
+        return
+    try:
+        interview = _mapping(state.get("interview_data"))
+        approval = _interview_approval(interview, settings)
+        prompt = _interview_prompt(field, _mapping(interview.get("answers")))
+        advice = InterviewAssistant().coach(
+            settings,
+            approval,
+            str(state.get("request", "")),
+            str(prompt["message"]),
+            user_question,
+        )
+    except HarnessError as error:
+        write(f"Coaching is unavailable: {error}")
+        return
+    write("Coaching only; your answer is unchanged:")
+    write(advice)
+
+
+def _interview_approval(
+    interview: Mapping[str, object],
+    settings: ProviderSettings,
+) -> ProviderApproval | None:
+    if interview.get("ai_assistance_enabled") is not True:
+        raise HarnessError("Use :ai to opt in before requesting model assistance.")
+    disclosure = describe_provider(settings)
+    if not disclosure.requires_approval:
+        return None
+    saved = _mapping(interview.get("ai_provider_approval"))
+    if (
+        saved.get("provider") != disclosure.provider.value
+        or saved.get("endpoint_fingerprint") != disclosure._approval_scope
+    ):
+        raise HarnessError(
+            "Provider settings changed. Enter :ai again to review and approve them."
+        )
+    return record_provider_approval(disclosure, approved=True)
+
+
+def _deterministic_question_texts() -> tuple[str, ...]:
+    prompts = list(CORE_QUESTION_PROMPTS.values())
+    prompts.extend(
+        question.prompt
+        for profile in TASK_PROFILES.values()
+        for question in profile.questions
+    )
+    return tuple(prompts)
+
+
+def _parse_suggestion_selection(value: str, count: int) -> tuple[int, ...]:
+    if not value.strip():
+        return ()
+    try:
+        numbers = tuple(int(item.strip()) for item in value.split(","))
+    except ValueError:
+        raise ValueError(
+            "Enter question numbers separated by commas, or leave blank."
+        ) from None
+    if (
+        not numbers
+        or len(set(numbers)) != len(numbers)
+        or any(number < 1 or number > count for number in numbers)
+    ):
+        raise ValueError("Choose each available question number at most once.")
+    return numbers
+
+
+def _is_coachable_field(field: str) -> bool:
+    if field in CORE_QUESTION_PROMPTS:
+        return field not in {
+            "task_types",
+            "target",
+            "task_type_instructions",
+            "path_scoped_instructions",
+            "custom_support",
+            "path_patterns",
+        }
+    return any(
+        question.key == field
+        for profile in TASK_PROFILES.values()
+        for question in profile.questions
+    )
 
 
 def _drive_workflow(
@@ -392,7 +707,7 @@ def _edit_requirements(
                 "operating context",
                 "constraints",
                 "desired outputs",
-                "task-specific answers",
+                "task-specific and supplemental answers",
                 "setup requirements",
                 "optional task instructions",
                 "path-scoped instructions",
@@ -501,8 +816,28 @@ def _edit_requirement_field(
     if field_number == 7:
         for answer in draft.task_answers:
             write(f"{answer.key}: {answer.value or '(not set)'}")
-        key = _required_line("Answer key to edit: ", read, write)
+        for index, answer in enumerate(draft.supplemental_answers, 1):
+            write(f"optional-{index}: {answer.question} - {answer.answer}")
+        key = _required_line(
+            "Answer key or optional-N to edit: ", read, write
+        )
         value = _edit_read("Updated answer (blank to remove): ", read, write)
+        if key.startswith("optional-"):
+            try:
+                index = int(key.removeprefix("optional-")) - 1
+            except ValueError:
+                raise ValueError("Choose a displayed optional answer number.") from None
+            if index < 0 or index >= len(draft.supplemental_answers):
+                raise ValueError("Choose a displayed optional answer number.")
+            supplemental = list(draft.supplemental_answers)
+            if value:
+                supplemental[index] = replace(
+                    supplemental[index],
+                    answer=value,
+                )
+            else:
+                supplemental.pop(index)
+            return replace(draft, supplemental_answers=tuple(supplemental))
         answers = [item for item in draft.task_answers if item.key != key]
         if value:
             answers.append(TaskAnswer(key, value, confirmed=True))
@@ -638,6 +973,7 @@ def _show_requirements(
         ("Agent target", "target"),
         ("Operating context", "operating_context"),
         ("Task-specific answers", "task_answers"),
+        ("Optional supplemental answers", "supplemental_answers"),
         ("Constraints", "constraints"),
         ("Desired outputs", "desired_outputs"),
         ("Setup", "setup"),
@@ -732,59 +1068,19 @@ def _interview_prompt(
     field: str,
     answers: Mapping[str, object],
 ) -> dict[str, object]:
-    messages = {
-        "purpose": (
-            "What is the main purpose of the harness? Give one clear result."
-        ),
-        "task_types": (
-            "Select one or more task types. The agent target is a separate choice."
-        ),
-        "target": (
-            "Choose the agent target. The model provider is separate; Ollama is a "
-            "provider, not an agent target."
-        ),
-        "operating_context": (
-            "What operating context should the instructions know? (Optional.)"
-        ),
-        "constraints": "List important constraints, separated by ';'. (Optional.)",
-        "desired_outputs": "List desired agent outputs, separated by ';'. (Optional.)",
-        "dependencies": "List confirmed dependencies, separated by ';'. (Optional.)",
-        "configuration": (
-            "List required configuration, using local placeholders only. (Optional.)"
-        ),
-        "task_type_instructions": "Create separate task-type instruction files? [y/N]",
-        "path_scoped_instructions": "Create path-scoped instruction files? [y/N]",
-        "custom_support": (
-            "Can the clarified custom task be supported by harness instructions? "
-            "[y]es/[n]o/[u]nsure"
-        ),
-        "path_patterns": (
-            "Enter exact relative glob patterns, separated by ';'. Do not enter "
-            "directories unless that exact pattern is intended."
-        ),
-    }
-    if field in {"task_types", "target"}:
-        choices = (
-            [
-                "1. Software development",
-                "2. Machine learning",
-                "3. Data science",
-                "4. Other/custom",
-            ]
-            if field == "task_types"
-            else ["1. Claude Code", "2. GitHub Copilot"]
-        )
-    elif field in messages:
-        choices = None
-    else:
+    message = CORE_QUESTION_PROMPTS.get(field)
+    if message is None:
         question = _find_profile_question(field, answers)
-        messages[field] = question.prompt
-        choices = None
+        message = question.prompt
     return {
         "kind": "requirements_interview",
         "field": field,
-        "message": messages[field],
-        **({"choices": choices} if choices else {}),
+        "message": message,
+        **(
+            {"choices": list(INTERVIEW_CHOICES[field])}
+            if field in INTERVIEW_CHOICES
+            else {}
+        ),
     }
 
 
@@ -855,6 +1151,9 @@ def _draft_from_interview(
         for key, value in by_profile.items()
         if value
     ]
+    supplemental_answers = _supplemental_answers_from_interview(
+        interview.get("supplemental_answers", [])
+    )
     unresolved: list[str] = []
     data_source_value = _optional_requirement(data_source)
     analysis_goal_value = _optional_requirement(analysis_goal)
@@ -889,6 +1188,7 @@ def _draft_from_interview(
             str(answers.get("operating_context", ""))
         ),
         task_answers=tuple(profile_answers),
+        supplemental_answers=supplemental_answers,
         constraints=_confirmed_values(str(answers.get("constraints", ""))),
         desired_outputs=_confirmed_values(str(answers.get("desired_outputs", ""))),
         setup=SetupRequirements(
@@ -910,6 +1210,30 @@ def _draft_from_interview(
         path_patterns=path_patterns,
         custom_task_support=custom_support,
     )
+
+
+def _supplemental_answers_from_interview(
+    value: object,
+) -> tuple[SupplementalAnswer, ...]:
+    if not isinstance(value, list):
+        raise RequirementsError("The saved optional interview answers are invalid.")
+    answers: list[SupplementalAnswer] = []
+    for item in value:
+        if (
+            not isinstance(item, Mapping)
+            or not isinstance(item.get("question"), str)
+            or not isinstance(item.get("answer"), str)
+        ):
+            raise RequirementsError(
+                "The saved optional interview answers are invalid."
+            )
+        answers.append(
+            SupplementalAnswer(
+                question=item["question"],
+                answer=item["answer"],
+            )
+        )
+    return tuple(answers)
 
 
 def _parse_task_types(value: str) -> tuple[TaskType, ...]:
