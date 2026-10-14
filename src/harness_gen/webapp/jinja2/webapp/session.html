@@ -1,0 +1,152 @@
+{% extends "webapp/base.html" %}
+{% block title %}Harness session · Harness Generator{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <h1 class="h2 mb-1">Harness session</h1>
+    <p class="text-body-secondary mb-0">Step: {{ phase }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-secondary btn-sm" name="action" value="pause">Save and pause</button></form>
+    <form method="post" action="{{ url('session') }}" onsubmit="return confirm('Restart from saved requirements? Generated files will not be carried over.');">{{ csrf_input }}<button class="btn btn-outline-secondary btn-sm" name="action" value="restart">Restart</button></form>
+    <form method="post" action="{{ url('session') }}" onsubmit="return confirm('Delete this saved session? Project files will not be changed.');">{{ csrf_input }}<button class="btn btn-outline-danger btn-sm" name="action" value="delete">Delete</button></form>
+  </div>
+</div>
+
+{% if error_message %}
+  <div class="alert alert-danger">{{ error_message }}</div>
+{% endif %}
+
+{% if state.outcome %}
+  <div class="card mb-4">
+    <div class="card-body">
+      {% if state.outcome == "complete" %}
+        <div class="alert alert-success">Files were written to {{ state.write_result.destination }}.</div>
+        {% for item in state.write_result.written %}<p class="mb-1">{{ item.action }}: <code>{{ item.path }}</code></p>{% endfor %}
+      {% else %}
+        <div class="alert alert-warning">Workflow stopped: {{ state.error_message }}</div>
+        {% for finding in validation_findings %}<p class="mb-1"><code>{{ finding.path or "output" }}</code>: {{ finding.message }}</p>{% endfor %}
+      {% endif %}
+    </div>
+  </div>
+{% elif phase == "user_input" and prompt.kind == "requirements_interview" %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Requirements interview</h2>
+    <p>{{ prompt.message }}</p>
+    {% if prompt.choices %}
+      <ul class="list-group mb-3">{% for choice in prompt.choices %}<li class="list-group-item">{{ choice }}</li>{% endfor %}</ul>
+    {% endif %}
+    <form method="post" action="{{ url('session') }}">
+      {{ csrf_input }}
+      <input type="hidden" name="action" value="answer-interview">
+      <label class="form-label" for="id_answer">Your answer</label>
+      {{ answer_form.answer }}
+      {% for error in answer_form.answer.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      <button class="btn btn-primary mt-3" type="submit">Save answer</button>
+    </form>
+    {% if interview.ai_assistance_enabled %}
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <form method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-primary btn-sm" name="action" value="suggest-questions">Suggest optional questions</button></form>
+        <form class="d-flex gap-2" method="post" action="{{ url('session') }}">
+          {{ csrf_input }}<input class="form-control form-control-sm" name="question" maxlength="2000" placeholder="Ask for coaching">
+          <button class="btn btn-outline-primary btn-sm" name="action" value="coach">Get advice</button>
+        </form>
+      </div>
+    {% else %}
+      <form class="mt-3" method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-secondary btn-sm" name="action" value="enable-assistance">Opt in to optional model assistance</button></form>
+    {% endif %}
+    {% if coaching %}<div class="alert alert-info mt-3"><strong>Coaching only; your answer is unchanged.</strong><p class="mb-0">{{ coaching }}</p></div>{% endif %}
+  </div></div>
+{% elif interview.suggestion_selection_pending %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Optional model-suggested questions</h2>
+    <p class="text-body-secondary">These questions are optional and do not satisfy requirements readiness checks.</p>
+    <form method="post" action="{{ url('session') }}">
+      {{ csrf_input }}<input type="hidden" name="action" value="select-suggestions">
+      {% for question in interview.suggested_questions %}
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="question_ids" value="{{ loop.index0 }}" id="suggestion-{{ loop.index0 }}">
+          <label class="form-check-label" for="suggestion-{{ loop.index0 }}">{{ question }}</label>
+        </div>
+      {% endfor %}
+      <button class="btn btn-primary" type="submit">Answer selected questions</button>
+    </form>
+  </div></div>
+{% elif interview.supplemental_pending_questions %}
+  {% set optional_index = interview.supplemental_index|default(0) %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Optional follow-up</h2>
+    <p>{{ interview.supplemental_pending_questions[optional_index] }}</p>
+    <form method="post" action="{{ url('session') }}">
+      {{ csrf_input }}<input type="hidden" name="action" value="answer-supplemental">
+      <textarea class="form-control mb-3" name="answer" rows="3" maxlength="20000"></textarea>
+      <button class="btn btn-primary" type="submit">Save optional answer</button>
+    </form>
+  </div></div>
+{% elif phase == "requirements_review" %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Review requirements</h2>
+    <p>{{ prompt.message }}</p>
+    <p><strong>Initial request:</strong> {{ prompt.request }}</p>
+    {% for label, value in prompt.summary.items() %}
+      <p class="mb-1"><strong>{{ label|replace("_", " ")|title }}:</strong> {{ value }}</p>
+    {% endfor %}
+    {% if prompt.unresolved_choices %}
+      <div class="alert alert-warning mt-3"><strong>Open choices</strong><ul class="mb-0">{% for item in prompt.unresolved_choices %}<li>{{ item }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% if display_blockers %}
+      <div class="alert alert-danger"><strong>Resolve before generation</strong><ul class="mb-0">{% for item in display_blockers %}<li>{{ item }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      {% if not display_blockers %}
+      <form method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-primary" name="action" value="requirements-confirm">Confirm requirements</button></form>
+      {% endif %}
+      <form method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-secondary" name="action" value="requirements-edit">Edit requirements</button></form>
+    </div>
+  </div></div>
+{% elif phase == "provider_approval_wait" %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Approve provider request</h2>
+    <div class="alert alert-warning">{{ prompt.message }}</div>
+    <form method="post" action="{{ url('session') }}" class="d-flex gap-2">
+      {{ csrf_input }}<input type="hidden" name="action" value="provider-approval">
+      <button class="btn btn-primary" name="approved" value="yes" type="submit">Approve and continue</button>
+      <button class="btn btn-outline-danger" name="approved" value="no" type="submit">Decline</button>
+    </form>
+  </div></div>
+{% elif phase == "destination_selection" %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Review generated files</h2>
+    <p>Generated content has passed offline validation. It has not been written.</p>
+    {% for file in generated_files %}
+      <details class="border rounded p-3 mb-2">
+        <summary><code>{{ file.path }}</code> — {{ file.purpose }}</summary>
+        <pre class="bg-body-tertiary rounded p-3 mt-3"><code>{{ file.content }}</code></pre>
+      </details>
+    {% endfor %}
+    <form method="post" action="{{ url('session') }}" class="mt-3">
+      {{ csrf_input }}<input type="hidden" name="action" value="destination">
+      <label class="form-label" for="destination">Existing project directory in your account workspace</label>
+      <select class="form-select mb-3" id="destination" name="destination" required>
+        {% for value, label in workspace_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit">Review files to create or replace</button>
+    </form>
+  </div></div>
+{% elif phase == "write_approval" %}
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h4">Approve project changes</h2>
+    <p>The application will apply this complete file set to the selected directory. Existing files will not be deleted.</p>
+    <ul class="list-group mb-3">{% for item in prompt.files %}<li class="list-group-item">{{ item }}</li>{% endfor %}</ul>
+    <form method="post" action="{{ url('session') }}" class="d-flex gap-2">
+      {{ csrf_input }}<input type="hidden" name="action" value="write-approval">
+      <button class="btn btn-danger" name="approved" value="yes" type="submit">Approve full set and write</button>
+      <button class="btn btn-outline-secondary" name="approved" value="no" type="submit">Decline</button>
+    </form>
+  </div></div>
+{% endif %}
+
+{% if phase not in ["user_input", "requirements_review", "provider_approval_wait", "destination_selection", "write_approval"] and not state.outcome %}
+  <div class="alert alert-info">The workflow is saved and will resume at its current step.</div>
+{% endif %}
+{% endblock %}

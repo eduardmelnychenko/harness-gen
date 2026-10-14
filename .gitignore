@@ -222,3 +222,8 @@ __marimo__/
 # IDE
 .idea
 .idea/*
+
+# Local web application state and per-account workspaces
+data/web.sqlite3
+workspaces/
+staticfiles/

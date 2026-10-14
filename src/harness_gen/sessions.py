@@ -91,10 +91,14 @@ class SessionManager:
         self,
         settings: DatabaseSettings | None = None,
         *,
+        owner_id: str | None = None,
         provider_settings: ProviderSettings | None = None,
         generator: GenerationRunner | None = None,
     ) -> None:
+        if owner_id is not None and not owner_id.strip():
+            raise ValueError("A session owner identifier must not be empty.")
         self.settings = settings or DatabaseSettings.from_environment()
+        self.owner_id = owner_id
         self.provider_settings = provider_settings
         self.generator = generator or HarnessGenerator()
         self._lock = threading.RLock()
@@ -114,6 +118,15 @@ class SessionManager:
                 CREATE TABLE IF NOT EXISTS active_session (
                     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                     thread_id TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            self._connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS active_sessions (
+                    owner_id TEXT PRIMARY KEY,
+                    thread_id TEXT NOT NULL UNIQUE,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -141,9 +154,15 @@ class SessionManager:
         with self._lock:
             self._ensure_open()
             try:
-                row = self._connection.execute(
-                    "SELECT thread_id FROM active_session WHERE singleton = 1"
-                ).fetchone()
+                if self.owner_id is None:
+                    row = self._connection.execute(
+                        "SELECT thread_id FROM active_session WHERE singleton = 1"
+                    ).fetchone()
+                else:
+                    row = self._connection.execute(
+                        "SELECT thread_id FROM active_sessions WHERE owner_id = ?",
+                        (self.owner_id,),
+                    ).fetchone()
             except sqlite3.Error as error:
                 raise SessionPersistenceError(
                     "The active session index could not be read. "
@@ -220,13 +239,22 @@ class SessionManager:
             config = _thread_config(thread_id)
             self._invoke_graph(state, config)
             try:
-                self._connection.execute(
-                    """
-                    INSERT INTO active_session (singleton, thread_id)
-                    VALUES (1, ?)
-                    """,
-                    (thread_id,),
-                )
+                if self.owner_id is None:
+                    self._connection.execute(
+                        """
+                        INSERT INTO active_session (singleton, thread_id)
+                        VALUES (1, ?)
+                        """,
+                        (thread_id,),
+                    )
+                else:
+                    self._connection.execute(
+                        """
+                        INSERT INTO active_sessions (owner_id, thread_id)
+                        VALUES (?, ?)
+                        """,
+                        (self.owner_id, thread_id),
+                    )
                 self._connection.commit()
             except sqlite3.Error as error:
                 self._checkpointer.delete_thread(thread_id)
@@ -400,14 +428,24 @@ class SessionManager:
             new_thread_id = str(uuid.uuid4())
             self._invoke_graph(seed, _thread_config(new_thread_id))
             try:
-                cursor = self._connection.execute(
-                    """
-                    UPDATE active_session
-                    SET thread_id = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE singleton = 1 AND thread_id = ?
-                    """,
-                    (new_thread_id, old_thread_id),
-                )
+                if self.owner_id is None:
+                    cursor = self._connection.execute(
+                        """
+                        UPDATE active_session
+                        SET thread_id = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE singleton = 1 AND thread_id = ?
+                        """,
+                        (new_thread_id, old_thread_id),
+                    )
+                else:
+                    cursor = self._connection.execute(
+                        """
+                        UPDATE active_sessions
+                        SET thread_id = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE owner_id = ? AND thread_id = ?
+                        """,
+                        (new_thread_id, self.owner_id, old_thread_id),
+                    )
                 if cursor.rowcount != 1:
                     raise sqlite3.DatabaseError(
                         "The active session changed during restart."
@@ -434,10 +472,18 @@ class SessionManager:
                 return False
             try:
                 self._checkpointer.delete_thread(thread_id)
-                self._connection.execute(
-                    "DELETE FROM active_session WHERE singleton = 1 AND thread_id = ?",
-                    (thread_id,),
-                )
+                if self.owner_id is None:
+                    self._connection.execute(
+                        "DELETE FROM active_session "
+                        "WHERE singleton = 1 AND thread_id = ?",
+                        (thread_id,),
+                    )
+                else:
+                    self._connection.execute(
+                        "DELETE FROM active_sessions "
+                        "WHERE owner_id = ? AND thread_id = ?",
+                        (self.owner_id, thread_id),
+                    )
                 self._connection.commit()
             except sqlite3.Error as error:
                 raise SessionPersistenceError(

@@ -32,6 +32,8 @@ The product gathers requirements and generates harness files. It does not promis
 * It must let the user correct or clarify that summary before files are finalized.
 * It must communicate limitations, missing information, and failures in terms the user can understand, and identify what input or action is needed next.
 * The user may pause, resume, or restart a session at any time. Pause and resume must preserve and restore the full session state, including confirmed requirements, selected task types and target agent, unresolved questions, and generated files. Restart must begin a new session with the prior requirements and choices carried over as editable starting points, but without carrying over generated files. Restart must not delete files already generated or other user files.
+* The product must provide an authenticated Django web interface using Jinja2 templates and Bootstrap 5 or later. Accounts must be created by an administrator. Each account must have one active session and must not access another account's requirements, generated files, or provider configuration.
+* Each account must be able to configure its own model provider and model. Provider credentials must be encrypted at rest with a key supplied by the server operator and must not be included in session state.
 
 ### LLM provider configuration
 
@@ -59,6 +61,7 @@ The product gathers requirements and generates harness files. It does not promis
 * The product must not silently overwrite existing user content. Before replacing or deleting user content, it must explain the effect and get the user's approval.
 * When generation fails or validation does not pass, the product must identify the affected outputs and must not present them as ready to use.
 * Before writing generated files, the product must show the selected project directory and identify each file to create or replace. It must obtain approval for the full set of changes and block writes after failed or incomplete validation.
+* The web application must limit each account's project destinations to its own configured workspace. It must not accept arbitrary server paths from browser input.
 
 
 ### Language and terminology
@@ -72,7 +75,9 @@ The product gathers requirements and generates harness files. It does not promis
 ### Security and privacy
 
 * The product must protect user requirements, conversation content, and generated files from unauthorized access.
+* The product must authenticate users and enforce account ownership on every session and provider-profile operation.
 * Configured provider credentials must not be included in saved sessions, generated files, or application error messages. The product must not ask users to enter real secret values in requirements or generated content.
+* Per-account provider credentials must be encrypted at rest. The operator must supply and back up the encryption key; loss of the key can make saved provider credentials unreadable.
 * Setup requirements must refer to credentials through local placeholders or environment-variable names, not credential values.
 * The product does not scan or redact arbitrary user text for secrets. It must warn users not to enter secret values and explain that user-provided text can be saved, sent to an approved provider, or included in generated files.
 * The product must explain relevant data handling, including whether session content is stored, where it is sent, and when it is removed. It must not claim privacy or retention guarantees that the implementation does not provide.
@@ -83,8 +88,8 @@ The product gathers requirements and generates harness files. It does not promis
 * The product must preserve confirmed requirements throughout a session and must not report success when required generation or validation steps have failed.
 * The product must report actionable errors when it cannot continue, generate a requested file, or validate an output.
 * Generated files must conform to their declared formats. Where automated validation is available, the product must use it and report its result.
-* The CLI must create a separate operational log file for each run in a `logs/` directory under the current working directory. The file name must include the local run-start timestamp to seconds; simultaneous runs must not overwrite each other's logs.
-* `HARNESS_CREATOR_LOG_LEVEL` must configure the log level. Use `INFO` when it is unset and `DEBUG` when its value is unsupported. Logs must not include raw requirements, conversation content, provider prompts or responses, or credentials.
+* The web application must log operational events without raw requirements, conversation content, provider prompts or responses, or credentials.
+* `HARNESS_CREATOR_LOG_LEVEL` must configure the application log level. Use `INFO` when it is unset and `DEBUG` when its value is unsupported.
 * `HARNESS_DB_URL` must configure the database connection URL. Use `sqlite:///data/harness.db` when it is unset or unsupported.
 
 ### Maintainability and extensibility
@@ -122,6 +127,8 @@ A harness-creation session meets the product requirements when:
 * Task-specific instructions reflect the selected task types. Path-scoped instructions use only relative patterns that the user supplied and confirmed during review.
 * The user can access the generated harness files and understand their purpose and required setup. Before a project write, the user sees the selected directory and each file to create or replace; any validation status other than pass blocks writing.
 * User requirements, conversation content, and generated files are protected from access by unauthorized users.
+* Each signed-in account can access only its own session and provider configuration. Generated project writes remain within that account's workspace.
+* The product uses a Django web UI with Jinja2 and Bootstrap 5 or later; user accounts are created by an administrator.
 * Configured provider credentials are not saved with session content or exposed in application errors. The product warns users not to enter secret values. It does not detect or redact secrets that users include in requirements, so such text can be stored, sent after provider approval, or included in generated files.
 * Before user data is sent to an external service or model, the product explains which service receives it and the applicable data storage, transmission, and removal practices.
 * The product does not replace or delete existing user content without explaining the effect and obtaining the user's approval.

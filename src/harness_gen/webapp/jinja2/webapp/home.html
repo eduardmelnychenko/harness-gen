@@ -1,0 +1,42 @@
+{% extends "webapp/base.html" %}
+{% block title %}Home · Harness Generator{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <section class="col-lg-8">
+    <h1 class="h2">Create harness instructions</h1>
+    <p class="text-body-secondary">Describe the agent's goals and constraints. The app guides you through review, generation, validation, and an approved project write.</p>
+    {% if state %}
+      <div class="card">
+        <div class="card-body">
+          <h2 class="h5">Your saved session</h2>
+          <p class="mb-1">Current step: <strong>{{ state.phase }}</strong></p>
+          <p class="text-body-secondary">{{ state.request }}</p>
+          <a class="btn btn-primary" href="{{ url('session') }}">Resume session</a>
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="card-body">
+          <form method="post">
+            {{ csrf_input }}
+            {% for error in form.non_field_errors() %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+            <label class="form-label" for="{{ form.request.id_for_label }}">{{ form.request.label }}</label>
+            {{ form.request }}
+            {% for error in form.request.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            <div class="form-text mb-3">Do not enter passwords, API keys, or other secrets. User text is not scanned or redacted.</div>
+            <button class="btn btn-primary" type="submit">Start requirements interview</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+  <aside class="col-lg-4">
+    <div class="card border-warning-subtle">
+      <div class="card-body">
+        <h2 class="h5">Data handling</h2>
+        <p class="small mb-0">Requirements and generated files are stored in your account's session checkpoint. Provider requests are disclosed before data is sent. Your provider API key is encrypted in the application database and is never added to session state.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

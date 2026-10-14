@@ -1,3 +1,3 @@
-from harness_gen.cli import main
+from harness_gen.web import main
 
-raise SystemExit(main())
+main()
