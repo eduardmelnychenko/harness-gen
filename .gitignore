@@ -224,6 +224,8 @@ __marimo__/
 .idea/*
 
 # Local web application state and per-account workspaces
+/data/
+/files_dir/
 data/web.sqlite3
 workspaces/
 staticfiles/

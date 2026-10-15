@@ -6,8 +6,10 @@ import stat
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(BASE_DIR / ".env", override=False)
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 

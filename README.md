@@ -57,12 +57,10 @@ uv run python -c 'from django.core.management.utils import get_random_secret_key
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-Example local `.env`:
+Create a local `.env` from the example and replace the required placeholders:
 
-```dotenv
-DJANGO_SECRET_KEY=replace-with-a-generated-key
-HARNESS_CREDENTIAL_ENCRYPTION_KEY=replace-with-a-generated-fernet-key
-HARNESS_DEBUG=true
+```sh
+cp .env.example .env
 ```
 
 Initialize the databases, create the administrator account, and run the
