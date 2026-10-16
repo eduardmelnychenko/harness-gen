@@ -34,6 +34,7 @@ from harness_gen.provider_approval import (
 from harness_gen.question_templates import TASK_PROFILES
 
 MAX_SUGGESTED_QUESTIONS = 3
+_MAX_TOPIC_INTERVIEW_ATTEMPTS = 2
 _MAX_QUESTION_LENGTH = 240
 _MAX_CHAT_QUESTION_LENGTH = 2000
 _MAX_COACHING_LENGTH = 3000
@@ -263,21 +264,41 @@ class InterviewAssistant:
         ]
         try:
             structured_model = model.with_structured_output(TopicInterviewTurn)
-            _log_model_input("topic_interview", messages)
-            result = structured_model.invoke(messages)
-            _log_model_output("topic_interview", result)
-            response = TopicInterviewTurn.model_validate(result)
-        except (OutputParserException, ValidationError, TypeError, ValueError) as error:
-            log_stage_event(
-                "topic_interview",
-                "model_output_rejected",
-                code="invalid_model_output",
-                output=_rejected_model_output(error),
-            )
-            raise HarnessError(
-                "The model's interview response did not pass validation. "
-                "Your answers were not changed."
-            ) from None
+            for attempt in range(1, _MAX_TOPIC_INTERVIEW_ATTEMPTS + 1):
+                _log_model_input("topic_interview", messages, attempt=attempt)
+                try:
+                    result = structured_model.invoke(messages)
+                    _log_model_output("topic_interview", result, attempt=attempt)
+                    return TopicInterviewTurn.model_validate(result)
+                except (
+                    OutputParserException,
+                    ValidationError,
+                    TypeError,
+                    ValueError,
+                ) as error:
+                    log_stage_event(
+                        "topic_interview",
+                        "model_output_rejected",
+                        attempt=attempt,
+                        code="invalid_model_output",
+                        output=_rejected_model_output(error),
+                    )
+                    if attempt == _MAX_TOPIC_INTERVIEW_ATTEMPTS:
+                        raise HarnessError(
+                            "The model's interview response did not pass "
+                            "validation. Your answers were not changed."
+                        ) from None
+                    messages.append(
+                        HumanMessage(
+                            content=(
+                                "Your previous response did not pass validation. "
+                                "Return a corrected response that follows the "
+                                "required schema exactly. Check every field, "
+                                "value type, and conditional requirement. Do not "
+                                "add prose or change the user's answers."
+                            )
+                        )
+                    )
         except _PROVIDER_ERRORS:
             log_stage_event(
                 "topic_interview",
@@ -285,7 +306,7 @@ class InterviewAssistant:
                 code="provider_request_failed",
             )
             raise ProviderRequestError() from None
-        return response
+        raise AssertionError("The topic interview attempt loop did not return.")
 
     def coach(
         self,
@@ -403,20 +424,34 @@ class InterviewAssistant:
         return advice
 
 
-def _log_model_input(stage: str, messages: Sequence[BaseMessage]) -> None:
-    log_stage_event(
-        stage,
-        "model_input",
-        messages=[
+def _log_model_input(
+    stage: str,
+    messages: Sequence[BaseMessage],
+    *,
+    attempt: int | None = None,
+) -> None:
+    fields: dict[str, object] = {
+        "messages": [
             {"role": message.type, "content": message.content}
             for message in messages
-        ],
-    )
+        ]
+    }
+    if attempt is not None:
+        fields["attempt"] = attempt
+    log_stage_event(stage, "model_input", **fields)
 
 
-def _log_model_output(stage: str, result: object) -> None:
+def _log_model_output(
+    stage: str,
+    result: object,
+    *,
+    attempt: int | None = None,
+) -> None:
     output = result.model_dump() if isinstance(result, BaseModel) else result
-    log_stage_event(stage, "model_output", output=output)
+    fields: dict[str, object] = {"output": output}
+    if attempt is not None:
+        fields["attempt"] = attempt
+    log_stage_event(stage, "model_output", **fields)
 
 
 def _rejected_model_output(error: Exception) -> object:

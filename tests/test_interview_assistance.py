@@ -45,6 +45,24 @@ class FakeModel:
         return self.coaching_output
 
 
+class SequencedRunnable:
+    def __init__(self, outputs: list[object]) -> None:
+        self.outputs = outputs
+        self.calls: list[object] = []
+
+    def invoke(self, messages: object) -> object:
+        self.calls.append(messages)
+        return self.outputs.pop(0)
+
+
+class SequencedModel:
+    def __init__(self, outputs: list[object]) -> None:
+        self.runnable = SequencedRunnable(outputs)
+
+    def with_structured_output(self, _schema: type[object]) -> SequencedRunnable:
+        return self.runnable
+
+
 class InterviewAssistanceValidationTests(unittest.TestCase):
     def tearDown(self) -> None:
         logger = logging.getLogger("harness_gen")
@@ -176,6 +194,46 @@ class InterviewAssistanceValidationTests(unittest.TestCase):
         context = json.loads(model.messages[1].content)
         self.assertEqual(context["mandatory_gaps"], [])
         self.assertEqual(context["selected_task_types"], ["software_development"])
+
+    def test_topic_interview_retries_invalid_structured_output_once(self) -> None:
+        model = SequencedModel(
+            [
+                {
+                    "sufficient": False,
+                    "next_question": "What is the purpose?",
+                    "extracted_requirements": [],
+                    "unresolved_choices": [],
+                    "unexpected": True,
+                },
+                {
+                    "sufficient": False,
+                    "next_question": "What is the main purpose?",
+                    "extracted_requirements": [],
+                    "unresolved_choices": ["purpose"],
+                },
+            ]
+        )
+        assistant = InterviewAssistant(
+            model_factory=lambda _settings, _approval: model
+        )
+
+        turn = assistant.interview_topic(
+            ProviderSettings.from_environment({}),
+            None,
+            "Create an API harness.",
+            ["software_development"],
+            "github_copilot",
+            {},
+            (),
+            ("What is the main purpose of the harness?",),
+        )
+
+        self.assertEqual(turn.next_question, "What is the main purpose?")
+        self.assertEqual(len(model.runnable.calls), 2)
+        self.assertIn(
+            "previous response did not pass validation",
+            model.runnable.calls[1][-1].content,
+        )
 
     def test_web_stage_log_records_interview_input_and_model_output(self) -> None:
         model = FakeModel(
