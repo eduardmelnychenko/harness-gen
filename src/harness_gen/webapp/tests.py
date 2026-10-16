@@ -107,6 +107,8 @@ class WebApplicationTests(TestCase):
         self.assertContains(response, "Create harness instructions")
         self.assertContains(response, "Start requirements interview")
         self.assertContains(response, "sticky-top")
+        self.assertNotContains(response, "Resume session")
+        self.assertNotContains(response, 'name="action" value="delete"')
 
     def test_starting_session_opens_deterministic_interview_in_browser(self) -> None:
         self.client.force_login(self.user)
@@ -125,9 +127,23 @@ class WebApplicationTests(TestCase):
                     {"request": "Create clear instructions for the team."},
                 )
                 self.assertRedirects(response, "/session/")
+                response = self.client.get("/")
+                self.assertContains(response, "Resume session")
+                self.assertContains(response, "Save and pause")
+                self.assertContains(response, "Restart")
+                self.assertContains(response, "Delete")
+                response = self.client.get("/provider/")
+                self.assertContains(response, "Resume session")
+                self.assertContains(response, "Save and pause")
+                self.assertContains(response, "Restart")
+                self.assertContains(response, "Delete")
                 response = self.client.get("/session/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Resume session")
+        self.assertContains(response, "Save and pause")
+        self.assertContains(response, "Restart")
+        self.assertContains(response, "Delete")
         self.assertContains(response, "Interview chat")
         self.assertContains(response, "shared with the operator")
         self.assertContains(response, "Create clear instructions for the team.")
@@ -280,6 +296,93 @@ class WebApplicationTests(TestCase):
 
         self.assertContains(response, "Which data source will the analysis use?")
         self.assertNotContains(response, "Review requirements")
+
+    def test_changed_provider_settings_can_be_reviewed_without_restarting(self) -> None:
+        self.client.force_login(self.user)
+        encryption_key = Fernet.generate_key().decode("ascii")
+        profile = ProviderProfile.objects.create(
+            user=self.user,
+            provider="openai",
+            model_name="test-model",
+            endpoint="https://api.example.test/v1",
+        )
+        with patch.dict(
+            os.environ,
+            {"HARNESS_CREDENTIAL_ENCRYPTION_KEY": encryption_key},
+        ):
+            profile.encrypt_api_key("test-api-key")
+            profile.save()
+
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "checkpoint.sqlite3"
+            with patch.dict(
+                os.environ,
+                {
+                    "HARNESS_DB_URL": f"sqlite:///{database}",
+                    "HARNESS_WORKSPACE_ROOT": str(Path(directory) / "workspaces"),
+                    "HARNESS_CREDENTIAL_ENCRYPTION_KEY": encryption_key,
+                },
+            ):
+                self.client.post(
+                    "/",
+                    {"request": "Create instructions for a service."},
+                )
+                response = self.client.post(
+                    "/session/",
+                    {"action": "enable-assistance"},
+                )
+                self.assertContains(response, "Approve for interview assistance")
+                response = self.client.post(
+                    "/session/",
+                    {"action": "approve-interview-provider"},
+                )
+                self.assertContains(response, "Ask the assistant a question")
+                self.assertContains(response, "Review provider disclosure")
+
+                profile.endpoint = "https://api.updated.example.test/v1"
+                profile.save(update_fields=["endpoint"])
+                response = self.client.post(
+                    "/session/",
+                    {
+                        "action": "chat-interview",
+                        "question": "How should I handle open choices?",
+                    },
+                )
+                self.assertContains(
+                    response,
+                    "Provider settings changed. Review and approve them "
+                    "before continuing.",
+                )
+                self.assertContains(response, "Review provider disclosure")
+
+                response = self.client.post(
+                    "/session/",
+                    {"action": "review-interview-provider"},
+                )
+                self.assertContains(response, "api.updated.example.test")
+                response = self.client.post(
+                    "/session/",
+                    {"action": "approve-interview-provider"},
+                )
+                self.assertContains(response, "Select one or more task types")
+
+                with patch(
+                    "harness_gen.webapp.services.InterviewAssistant.answer_question",
+                    return_value="Use the confirmed requirements.",
+                ):
+                    response = self.client.post(
+                        "/session/",
+                        {
+                            "action": "chat-interview",
+                            "question": "How should I handle open choices?",
+                        },
+                    )
+
+        self.assertContains(response, "Use the confirmed requirements.")
+        self.assertNotContains(
+            response,
+            "Provider settings changed. Review and approve them before continuing.",
+        )
 
     def test_legacy_interview_checkpoint_renders_reconstructed_chat_history(self) -> None:
         self.client.force_login(self.user)

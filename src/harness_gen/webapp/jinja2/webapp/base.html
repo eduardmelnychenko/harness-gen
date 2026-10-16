@@ -8,16 +8,33 @@
 </head>
 <body class="bg-body-tertiary">
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-    <div class="container">
+    <div class="container flex-wrap">
       <a class="navbar-brand" href="{{ url('home') }}">Harness Generator</a>
       {% if request.user.is_authenticated %}
-      <div class="d-flex align-items-center gap-3">
-        <a class="link-light" href="{{ url('provider-settings') }}">Provider settings</a>
-        <span class="text-light small">{{ request.user.username }}</span>
-        <form method="post" action="{{ url('logout') }}">
+      <div class="d-flex flex-wrap align-items-center gap-2 ms-lg-auto">
+        {% if has_active_session %}
+        <a class="btn btn-primary btn-sm" href="{{ url('session') }}">Resume session</a>
+        <form method="post" action="{{ url('session') }}">
           {{ csrf_input }}
-          <button class="btn btn-outline-light btn-sm" type="submit">Sign out</button>
+          <button class="btn btn-outline-light btn-sm" name="action" value="pause" type="submit">Save and pause</button>
         </form>
+        <form method="post" action="{{ url('session') }}" onsubmit="return confirm('Restart from saved requirements? Generated files will not be carried over.');">
+          {{ csrf_input }}
+          <button class="btn btn-outline-light btn-sm" name="action" value="restart" type="submit">Restart</button>
+        </form>
+        <form method="post" action="{{ url('session') }}" onsubmit="return confirm('Delete this saved session? Project files will not be changed.');">
+          {{ csrf_input }}
+          <button class="btn btn-outline-danger btn-sm" name="action" value="delete" type="submit">Delete</button>
+        </form>
+        {% endif %}
+        <div class="d-flex align-items-center gap-3">
+          <a class="link-light" href="{{ url('provider-settings') }}">Provider settings</a>
+          <span class="text-light small">{{ request.user.username }}</span>
+          <form method="post" action="{{ url('logout') }}">
+            {{ csrf_input }}
+            <button class="btn btn-outline-light btn-sm" type="submit">Sign out</button>
+          </form>
+        </div>
       </div>
       {% endif %}
     </div>

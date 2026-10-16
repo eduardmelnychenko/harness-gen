@@ -51,7 +51,7 @@
       "description": "Use the configured provider through a shared interface, default to local Ollama, report configuration failures without fallback, and obtain approval before sending data to an external service.",
       "status": "pass",
       "evidence": [
-        "The web application discloses the initial request, choices, interview questions and answers, user questions, model replies, and setup details before external interview assistance. tests/test_provider_approval.py verifies disclosure contents and approval scope; tests/test_workflow.py verifies approval scope and endpoint changes. Live provider calls were not made."
+        "The web application discloses the initial request, choices, interview questions and answers, user questions, model replies, and setup details before external interview assistance. tests/test_provider_approval.py verifies disclosure contents and approval scope; tests/test_workflow.py verifies approval scope and endpoint changes; src/harness_gen/webapp/tests.py verifies users can re-review and approve changed provider settings in an active session without losing the pending interview prompt. Live provider calls were not made."
       ]
     },
     {

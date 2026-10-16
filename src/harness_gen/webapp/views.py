@@ -52,6 +52,10 @@ def _render(
 ) -> HttpResponse:
     template = engines["jinja2"].get_template(template_name)
     render_context = dict(context or {})
+    render_context.setdefault(
+        "has_active_session",
+        render_context.get("state") is not None,
+    )
     render_context["messages"] = list(get_messages(request))
     return HttpResponse(template.render(render_context, request), status=status)
 
@@ -153,7 +157,13 @@ def provider_settings(request: HttpRequest) -> HttpResponse:
                 "Provider settings were saved. The API key is encrypted at rest and is not shown again.",
             )
             return redirect("home")
-    return _render(request, "webapp/provider_settings.html", {"form": form})
+    with session_manager(request.user) as manager:
+        has_active_session = manager.active_thread_id is not None
+    return _render(
+        request,
+        "webapp/provider_settings.html",
+        {"form": form, "has_active_session": has_active_session},
+    )
 
 
 @login_required
@@ -198,6 +208,7 @@ def session_view(request: HttpRequest) -> HttpResponse:
                         {
                             "disclosure": extra["disclosure"],
                             "approval_action": "approve-interview-provider",
+                            "state": state,
                         },
                     )
                 if extra.get("edit_form") is not None:
@@ -275,6 +286,13 @@ def _handle_session_action(
             or interview.get("supplemental_pending_questions")
         ):
             return state, {}
+        return ensure_interview_prompt(manager), {}
+    if action == "review-interview-provider":
+        if state.get("pending_prompt") is not None:
+            manager.resume(":ai")
+        state, disclosure = set_interview_assistance(manager, approved=False)
+        if disclosure:
+            return state, {"disclosure": disclosure}
         return ensure_interview_prompt(manager), {}
     if action == "approve-interview-provider":
         state, disclosure = set_interview_assistance(manager, approved=True)

@@ -127,3 +127,11 @@
 - Updated authenticated-page notices, README, product and architecture requirements, and `feature_list.json` to explain shared-log access, retention, and the risk that user-entered secrets can appear because arbitrary text is not scanned or redacted.
 - Validation: all 112 unit tests and 12 Django web tests passed; Python compilation, feature inventory JSON parsing, Django system checks, permission tests, and `git diff --check` passed.
 - Not run: live provider requests.
+
+### Reapproving changed interview provider settings
+
+- Added a session action to review the current provider disclosure while interview assistance is enabled. Resuming the pending interview action before review lets the user approve a changed provider or endpoint without restarting or losing the pending prompt.
+- Updated the session UI, architecture and README documentation, and provider-approval feature evidence.
+- Added a web regression test that changes an approved provider endpoint, verifies the stale approval is blocked, then reapproves the new endpoint and confirms interview chat works without restarting.
+- Validation: all 13 Django web tests passed; Django system checks and `git diff --check` passed.
+- Not run: the full unit suite or live provider requests.

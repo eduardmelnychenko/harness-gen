@@ -53,7 +53,7 @@ agent product surface.
 6. Generated files are validated and previewed. The user selects an existing project directory inside their own workspace, reviews every file to create or replace, and approves the entire set.
 7. The graph checkpoints the active prompt, chat transcript, and full workflow state. Users can resume, restart from editable requirements without generated files, or delete their own saved session. Deletion does not guarantee secure erasure.
 
-The browser session UI maps each graph interrupt to a page action. It must not bypass provider approval, material-requirement gates, validation failures, stale artifact checks, or full-set write approval. The graph remains the source of truth for workflow progression. The full interview transcript is passed to generation as separate contextual input; reviewed requirements remain authoritative, and transcript content does not satisfy readiness gates.
+The browser session UI maps each graph interrupt to a page action. External-provider interview approval is bound to the selected provider and endpoint. If either setting changes, the user can review the updated disclosure and approve it again from the active session without restarting. The UI must not bypass provider approval, material-requirement gates, validation failures, stale artifact checks, or full-set write approval. The graph remains the source of truth for workflow progression. The full interview transcript is passed to generation as separate contextual input; reviewed requirements remain authoritative, and transcript content does not satisfy readiness gates.
 
 The web interview renders predefined answers as accessible Bootstrap choice
 controls: task types allow multiple selections, while target, yes/no, and

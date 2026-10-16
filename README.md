@@ -30,7 +30,8 @@ use text responses. The shared navigation header stays visible while you scroll.
 The full conversation is included as separate context during generation, while
 reviewed requirements remain authoritative. The application discloses provider
 use and asks for approval before it sends interview or generation content to an
-external provider.
+external provider. If you change the provider or endpoint during an interview,
+you can review and approve the updated disclosure from the active session.
 
 ## Requirements and setup
 
