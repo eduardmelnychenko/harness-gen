@@ -7,26 +7,24 @@ purpose of each interaction.
 
 ## System context
 
-`diagrams/c4-context.drawio` shows the harness author, the local Harness
-Generator system, configured model providers, and the user's project workspace.
-It answers what the system does and what external resources it interacts with.
-Provider transmission and project-file writes are approval-gated.
+`diagrams/c4-context.drawio` shows the authenticated browser user, the Django
+Harness Generator, configured model providers, and the account-owned project
+workspace. Provider transmission and project-file writes are approval-gated.
 
 ## Containers
 
-`diagrams/c4-containers.drawio` shows the locally run Python CLI, its SQLite
-checkpoint database, operational log files, and its interactions with the
-configured model provider and selected project workspace. It answers where the
-main application behavior and persistent data reside. There is no web service
-or background worker.
+`diagrams/c4-containers.drawio` shows the Django web application, account
+database, SQLite checkpoint database, configured application logs, and
+interactions with the model provider and account-owned project workspace.
 
 ## Components
 
-`diagrams/c4-components.drawio` expands the CLI container to show its terminal,
-requirements, session/workflow, provider, generation, validation, and artifact
-writing responsibilities. It answers how a reviewed request moves through
-generation and approval before files are applied. The graph checkpoint
-preserves state; credentials remain in runtime configuration.
+`diagrams/c4-components.drawio` expands the web container to show its browser
+views, requirements interview, session/workflow, provider, generation,
+validation, and artifact-writing responsibilities. It answers how a reviewed
+request moves through generation and approval before files are applied. The
+graph checkpoint preserves state; per-account provider credentials are
+encrypted in the Django database.
 
 ## Code
 

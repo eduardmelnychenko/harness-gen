@@ -37,6 +37,7 @@ from harness_gen.errors import (
     StaleArtifactReview,
     UnvalidatedArtifactsError,
 )
+from harness_gen.logging_events import log_stage_event
 from harness_gen.generation import HarnessGenerator, plan_generation
 from harness_gen.provider_approval import (
     ProviderApproval,
@@ -382,6 +383,11 @@ def _generate(
     generator: GenerationRunner,
 ) -> HarnessWorkflowState:
     if provider_settings is None:
+        log_stage_event(
+            "generation",
+            "failed",
+            code="provider_configuration_error",
+        )
         return _failure(
             "provider_configuration_error",
             "Configure the model provider before generation.",
@@ -391,7 +397,23 @@ def _generate(
         approval = _current_provider_approval(state, provider_settings)
         result = generator.generate(requirements, provider_settings, approval)
     except HarnessError as error:
+        log_stage_event(
+            "generation",
+            "failed",
+            code="generation_failed",
+            error_type=type(error).__name__,
+        )
         return _failure("generation_failed", str(error))
+    log_stage_event(
+        "generation",
+        "completed",
+        attempt_count=result.attempts,
+        validation_status=result.validation.status.value,
+        findings=[
+            {"code": item.code, "location": item.path}
+            for item in result.validation.findings
+        ],
+    )
     return {
         "planned_artifacts": [
             {
@@ -425,6 +447,13 @@ def _generate(
 
 def _validate_generation(state: HarnessWorkflowState) -> HarnessWorkflowState:
     if state.get("validation_status") != ValidationStatus.PASS.value:
+        findings = state.get("validation_findings", [])
+        log_stage_event(
+            "output_validation",
+            "blocked",
+            code="validation_failed",
+            findings=findings,
+        )
         return _failure(
             "validation_failed",
             "Generated files did not pass validation. Review the findings.",
@@ -432,6 +461,11 @@ def _validate_generation(state: HarnessWorkflowState) -> HarnessWorkflowState:
     try:
         result = _generation_from_state(state)
     except (HarnessError, KeyError, TypeError, ValueError):
+        log_stage_event(
+            "output_validation",
+            "failed",
+            code="validation_restore_failed",
+        )
         return _failure(
             "validation_failed",
             "The generated files could not be restored for validation.",
@@ -441,6 +475,15 @@ def _validate_generation(state: HarnessWorkflowState) -> HarnessWorkflowState:
         "validation_status": report.status.value,
         "validation_findings": _findings_to_state(report.findings),
     }
+    log_stage_event(
+        "output_validation",
+        "final_result",
+        status=report.status.value,
+        findings=[
+            {"code": item.code, "location": item.path}
+            for item in report.findings
+        ],
+    )
     if report.status is not ValidationStatus.PASS:
         update.update(
             _failure(
@@ -718,6 +761,7 @@ def _state_mapping(value: object) -> Mapping[str, object]:
 
 
 def _failure(outcome: str, message: str) -> HarnessWorkflowState:
+    log_stage_event("workflow", "failed", code=outcome)
     return {
         "phase": "done",
         "outcome": outcome,

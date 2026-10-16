@@ -67,6 +67,16 @@ class SupplementalAnswer:
 
 
 @dataclass(frozen=True, slots=True)
+class InterviewMessage:
+    role: str
+    content: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if self.role not in {"assistant", "user"} or not self.content.strip():
+            raise RequirementsError("An interview message is invalid.")
+
+
+@dataclass(frozen=True, slots=True)
 class SetupRequirements:
     platform: RequirementValue | None = None
     runtime: RequirementValue | None = None
@@ -96,6 +106,7 @@ class RequirementsDraft:
     operating_context: RequirementValue | None = None
     task_answers: tuple[TaskAnswer, ...] = ()
     supplemental_answers: tuple[SupplementalAnswer, ...] = ()
+    interview_conversation: tuple[InterviewMessage, ...] = ()
     constraints: tuple[RequirementValue, ...] = ()
     desired_outputs: tuple[RequirementValue, ...] = ()
     setup: SetupRequirements = field(default_factory=SetupRequirements)
@@ -118,6 +129,11 @@ class RequirementsDraft:
         ]
         if len(set(supplemental_questions)) != len(supplemental_questions):
             raise RequirementsError("Each supplemental question must be unique.")
+        if any(
+            not isinstance(item, InterviewMessage)
+            for item in self.interview_conversation
+        ):
+            raise RequirementsError("The interview conversation is invalid.")
         patterns = [item.pattern for item in self.path_patterns]
         if len(set(patterns)) != len(patterns):
             raise RequirementsError("Each path-scoped glob pattern must be unique.")
@@ -272,6 +288,10 @@ def requirements_to_state(draft: RequirementsDraft) -> dict[str, object]:
             {"question": item.question, "answer": item.answer}
             for item in draft.supplemental_answers
         ],
+        "interview_conversation": [
+            {"role": item.role, "content": item.content}
+            for item in draft.interview_conversation
+        ],
         "constraints": [
             _requirement_value_to_state(item) for item in draft.constraints
         ],
@@ -325,6 +345,7 @@ def requirements_from_state(
             "operating_context",
             "task_answers",
             "supplemental_answers",
+            "interview_conversation",
             "constraints",
             "desired_outputs",
             "setup",
@@ -334,10 +355,17 @@ def requirements_from_state(
             "path_patterns",
             "custom_task_support",
         }
-        legacy_requirement_keys = requirement_keys - {"supplemental_answers"}
+        legacy_requirement_keys = requirement_keys - {
+            "supplemental_answers",
+            "interview_conversation",
+        }
+        pre_conversation_keys = requirement_keys - {"interview_conversation"}
+        pre_supplemental_keys = requirement_keys - {"supplemental_answers"}
         saved_keys = frozenset(values)
         if saved_keys not in {
             frozenset(requirement_keys),
+            frozenset(pre_conversation_keys),
+            frozenset(pre_supplemental_keys),
             frozenset(legacy_requirement_keys),
         }:
             raise TypeError("The saved requirements have unsupported fields.")
@@ -380,6 +408,10 @@ def requirements_from_state(
             supplemental_answers=tuple(
                 _supplemental_answer_from_state(item)
                 for item in _state_list(values.get("supplemental_answers", []))
+            ),
+            interview_conversation=tuple(
+                _interview_message_from_state(item)
+                for item in _state_list(values.get("interview_conversation", []))
             ),
             constraints=tuple(
                 _required_requirement_value(item)
@@ -482,6 +514,15 @@ def _supplemental_answer_from_state(value: object) -> SupplementalAnswer:
     return SupplementalAnswer(
         question=_state_string(data["question"]),
         answer=_state_string(data["answer"]),
+    )
+
+
+def _interview_message_from_state(value: object) -> InterviewMessage:
+    data = _state_mapping(value)
+    _require_state_keys(data, {"role", "content"})
+    return InterviewMessage(
+        role=_state_string(data["role"]),
+        content=_state_string(data["content"]),
     )
 
 

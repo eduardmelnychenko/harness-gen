@@ -2,143 +2,104 @@
 
 ## Status and scope
 
-This document describes the implemented components and the remaining architecture for the product in `docs/PRODUCT.md`. The CLI is line-oriented. LangChain is employed for language model interactions. The code provides deterministic question templates, optional provider-backed interview assistance, typed LangGraph state, and routes a reviewed requirements draft through provider approval, generation, offline validation, destination review, write approval, and apply. SQLite persists one active thread and pending interrupts. Deterministic questions and readiness gates remain authoritative; optional model suggestions and coaching cannot answer or satisfy them.
+Harness Generator is an authenticated Django web application. Django serves
+Jinja2 templates styled with Bootstrap 5.3. The browser UI drives the existing
+LangGraph workflow and domain services for deterministic requirements,
+provider-backed assistance, generation, offline validation, artifact review, and
+approved writes. The interactive CLI is no longer an application entry point.
 
-The configured provider generates complete harness instruction files for Claude Code or GitHub Copilot at project level. Deterministic planning restricts outputs to supported target paths; the LLM writes the contents for core, shared `AGENTS.md`, optional task-type, and optional path-scoped instructions. Material open choices block final generation. Generated files are checked for safe, unique paths, required confirmed details, shared-context references, and target frontmatter. Validation does not prove semantic correctness, automatic `AGENTS.md` discovery, or behavior on every target product surface. Only passing files can be written, and the user approves the full create/replace set first. The writer rejects unsafe paths and symbolic links and uses atomic replacement per file. The CLI previews generated contents and routes the user through destination and write approval. Project source code, scaffolds, setup guides, native target settings, tool/MCP configuration, and command-running hooks are not generated. Artifact-generation calls use corrective retries for invalid JSON, structurally invalid responses, or failed offline content validation; Ollama uses its native JSON output mode. Reusable skills/prompts/agent profiles remain deferred.
-
-The current architecture preserves the existing provider, target capability, generation, validation, and artifact-writing services. The graph is an orchestration and persistence layer, not a replacement for those domain services.
-
-The system turns a user's natural-language description into a reviewed, validated set of harness files for a supported task type and target agent. It does not guarantee compatibility with targets or environments that it does not support.
+The product creates harness instruction files for Claude Code and GitHub
+Copilot. It does not create application code, scaffolds, native target settings,
+tool configuration, setup guides, or command-running hooks. Offline validation
+does not prove semantic correctness, target discovery, or behavior on every
+agent product surface.
 
 ## Technology decisions
 
 | Area | Decision |
 | --- | --- |
-| Runtime | Python 3.14 or later. |
-| Environment vars| .env |
-| LLM management/orchestration | LangChain/LangGraph |
-| Project and dependency management | Use `uv` to manage the Python project, dependencies, virtual environment, and lockfile. Declare project metadata and dependencies in `pyproject.toml`; keep the generated `uv.lock` in sync with dependency changes. |
-| Session persistence | Use `langgraph-checkpoint-sqlite` with one active thread. `HARNESS_DB_URL` configures the database URL; use `sqlite:///data/harness.db` when it is unset or unsupported. The CLI does not import records from the former custom session table. |
-| User interface | Use a line-oriented terminal interface, not a full-screen TUI. The CLI invokes and resumes the graph and renders requirements review, external-provider approval, destination selection, and write-approval interrupts as prompts. Deterministic task-profile questions are saved in a draft graph thread. Optional interview assistance requires `:ai` opt-in and provider disclosure/approval before model requests. `:suggest` requests up to three optional questions; `? <question>` asks for coaching on the active deterministic question. Suggestions and answers are not readiness inputs. `:pause`, end-of-input, or interruption preserves the active prompt and answers in SQLite. |
-| LLM integration | Use one provider-neutral interface with direct adapters for Ollama, OpenAI, Azure OpenAI, Meta's hosted API, Google Gemini, and Anthropic Claude. Use a local Ollama endpoint by default. The concrete SDKs and supported models are implementation choices. |
+| Runtime | Python 3.14 or later; dependencies and lockfile managed by `uv`. |
+| Web framework | Django 5.2, Django authentication, CSRF-protected POST actions, and administrator-created accounts. |
+| Templates and styling | Django Jinja2 backend and Bootstrap 5.3 styles. Django's standard template backend remains enabled for the admin. |
+| Session workflow | LangGraph with the SQLite checkpointer. One active thread is indexed per Django account. |
+| Django persistence | A separate SQLite database stores Django accounts and provider profiles. `HARNESS_DJANGO_DB` selects its path. |
+| Workflow persistence | `HARNESS_DB_URL` selects the checkpointer database, defaulting to `sqlite:///data/harness.db`. The web app does not import or adopt legacy unowned CLI sessions. |
+| Provider configuration | Each account has a provider profile. Credentials are encrypted with Fernet using `HARNESS_CREDENTIAL_ENCRYPTION_KEY`; decrypted credentials are runtime-only. |
+| Project destinations | Writes are restricted to `HARNESS_WORKSPACE_ROOT/<account-id>`. The selected project directory must already exist. |
+| LLM integration | A provider-neutral interface supports Ollama, OpenAI, Azure OpenAI, Meta's hosted API, Google Gemini, and Anthropic Claude. The user configures the provider separately from the target agent. |
 
-The graph and checkpointer replace a custom session table as the workflow and persistence layer. `active_session` stores only the current thread identifier; LangGraph's SQLite checkpointer stores the state and pending interrupts. The implementation does not import legacy custom session rows. The CLI first gathers requirements through saved user prompts, then promotes the same thread into the generation workflow. Provider adapters, task and target capabilities, validation, safety gates, and user-visible product behavior remain separate domain services.
-
-## LangGraph workflow
-
-The `workflow.py` graph uses separate nodes for requirements review, provider disclosure and approval, generation, validation, destination selection, artifact review, and apply. Each workflow decision uses a LangGraph interrupt. `SessionManager` creates, restores, restarts, and deletes the active thread. The CLI gathers deterministic task-profile answers before the graph presents its requirements summary. The user can separately opt into interview-time suggestions or coaching; before any such request, the CLI discloses the configured provider and obtains approval for external providers. The later generation disclosure and approval remain a separate gate.
-
-Compile one graph for the interactive harness-creation workflow and assign a UUID thread identifier to each session. A small `active_session` record in the checkpoint database points to the active thread. The CLI remains responsible for the session menu, provider configuration, and rendering terminal prompts. Graph nodes perform workflow steps and return typed state updates; conditional edges route requirements, generation, validation, and write outcomes.
-
-The graph state contains the current interview answers, request, task and target selections, confirmed answers and corrections, setup requirements, path rules, unresolved choices, review status, provider-approval status, planned artifact paths, generated files, validation findings, and write-review status. Keep credentials, provider secrets, and raw operational logs out of graph state. Treat user and provider content as data, and retain the existing boundary that user-provided text is not automatically scanned or redacted for secrets.
-
-Use focused graph nodes for requirements review, external-provider approval, provider-backed generation, offline validation, artifact review, final approval, and apply. Keep task profiles, target capability checks, provider disclosure, provider adapters, generation, validation, and artifact writing as separate domain services called by nodes. Bound corrective generation and validation retries as they are today, and route failures to a state-preserving, actionable terminal outcome.
-
-Use LangGraph human-in-the-loop interrupts for requirements-summary review, external-provider approval, destination selection, and final apply approval. The CLI renders each interrupt, collects one response, and resumes the same thread. It checkpoints each local requirements answer before asking the next question and previews generated file contents before destination selection. Inspect and checkpoint the destination's create/replace snapshot before final approval; apply the saved snapshot and abort if the destination identity, files, or drafts have changed since review. No project write occurs before final approval. `:pause`, EOF, and keyboard interruption preserve the active prompt and current answer in the checkpointer. Do not route around provider approval, unresolved-requirement gates, validation failures, stale-review checks, or full-set write approval.
-
-The SQLite checkpointer is the source of truth for session progression and recoverable graph state. Retain one active thread and preserve pause/resume/restart/delete behavior. Restart initializes a new thread from prior requirements and choices as editable seed input, without generated files; it does not remove files already written to a project. Deletion removes the thread's checkpoint and write rows. It does not guarantee secure erasure from storage media. The implementation creates the database file with owner-only permissions and new parent directories with owner-only permissions. The typed state does not accept provider settings or credentials; provider approval state stores only the provider, endpoint fingerprint, and approval decision. User requirements and generated content remain checkpointed as documented.
-
-## Logical components
-
-Keep these responsibilities separate so that conversation, generation, and validation can evolve independently:
+## Components
 
 | Component | Responsibility |
 | --- | --- |
-| Terminal interface and graph driver | `harness-gen` and `python -m harness_gen` start or resume the active thread, collect and checkpoint task-profile requirements, render graph review/provider/write decisions, preview generated files, and pass responses back to the graph. Present the model provider separately from the target-agent choices; Ollama is a provider, while Claude Code and GitHub Copilot select generated file formats. |
-| LangGraph workflow | Separate graph nodes route a reviewed draft through provider approval, generation, validation, destination and write review, and apply. The graph uses typed state, conditional edges, and resumable human-input interrupts. Route unresolved or failed work to actionable outcomes without treating assumptions as confirmed requirements. |
-| LLM provider interface and adapters | Provide a shared contract for model requests, responses, and errors. Keep provider-specific protocols and configuration behind direct adapters for the supported providers; callers use the shared contract rather than vendor APIs. Use LangGraph structured typed output. |
-| Graph state | The typed state defines fields for the current request, task-type selections, target agent, optional instruction output selections, confirmed answers, user-confirmed path rules, structured setup requirements, unresolved questions, reviewable summary, generated files, validation results, and approved destination review. Persist JSON-compatible state through the configured LangGraph checkpointer; runtime provider credentials are excluded. |
-| Deterministic question templates | `question_templates.py` owns the fixed interview prompts, task-profile question data, and task guidance. Keep these templates independent of the model-assistance prompts so model output cannot change the required interview or readiness rules. |
-| Optional interview assistance | `interview_assistance.py` uses the shared provider-neutral chat model for up to three structured optional question suggestions and coaching on an active deterministic question. Require explicit user opt-in, provider disclosure, and external-provider approval before sending the request. Validate suggestions for count, shape, duplication, and overlap with deterministic templates. Coaching advice never fills or confirms a user answer. Store selected supplemental answers separately from deterministic task answers and exclude them from readiness gates. |
-| Target adapters | Use the typed artifact capability catalog to describe each supported agent's conventions, supported artifact kinds, and limitations. Check support for the requested artifact set before generation; do not label unsupported output compatible. |
-| Generation planner and LLM | Map reviewed requirements to an exact set of supported output paths and ask the configured provider to create each file's contents in the selected target's conventions. Core files are `CLAUDE.md` or `.github/copilot-instructions.md`, with a shared root `AGENTS.md`; optional task-type and path-scoped files use the target-native locations and frontmatter. No application scaffold or task implementation is generated. |
-| Output validator | Check safe, unique planned paths, required confirmed details in the core and shared context, the core reference to `AGENTS.md`, and exact target-native path frontmatter. Report failures and block writes unless validation passes. Checks do not prove semantic correctness, automatic `AGENTS.md` discovery, or behavior on every target surface. |
-| Artifact manager | Present generated file contents and purpose, inspect paths beneath an existing selected project directory, and list create/replace actions before approval. Bind approval to the destination, draft, and full write set; reject stale reviews, failed validation, unsafe paths, and symbolic links; atomically apply each approved file and report partial writes. Project files are never deleted. |
-| Checkpoint persistence | `SessionManager` uses a LangGraph SQLite checkpointer and an `active_session` pointer for one active thread. It supports pause/resume during requirements and workflow decisions, restart from editable requirements without generated artifacts, and active-thread deletion. The CLI reports the checkpoint path and explains that deletion does not ensure secure erasure. Existing custom session-table records are not imported. |
-| Application logging | Write operational events to a separate, owner-only timestamped file under `logs/` in the current working directory for each CLI run. Configure severity with `HARNESS_CREATOR_LOG_LEVEL`; do not log raw user/provider content or credentials. |
+| Django project | `harness_gen.web` configures settings, URL routing, WSGI/ASGI, Jinja2, authentication, CSRF, static handling, and the Django database. `manage.py` and `harness-gen-web` run Django management commands. |
+| Web application | `harness_gen.webapp` provides login/logout, administrator-managed account access, provider settings, session pages, forms, and Jinja2 templates. Mutations use POST requests protected by Django CSRF middleware. |
+| Provider profile | A one-to-one profile stores the provider, model, endpoint, and encrypted credential. Runtime settings are built from the profile without adding credentials to graph state. |
+| Interview workflow | The web UI checkpoints a topic-based chat. After explicit task-type and target choices, an opted-in model selects follow-up topics, extracts only user-stated requirements, and assesses when the interview is sufficient. Existing material-readiness checks remain authoritative. Without opt-in, the deterministic interview remains available. Remote providers require disclosure and approval. |
+| LangGraph workflow | Typed workflow state and interrupt nodes manage requirements review, provider disclosure, generation, validation, destination review, write approval, and apply. |
+| Session manager | `SessionManager` loads the active thread for the authenticated account, checkpoints answers, resumes decisions, and supports restart and deletion. `active_sessions` is keyed by owner ID. A web request cannot select a thread ID directly. |
+| Provider adapters | Direct provider adapters implement one shared model contract. Calls require a configured provider; the app does not silently switch providers. |
+| Generation planner and LLM | The planner fixes the output file set and paths. The provider supplies content only for those planned artifacts. |
+| Output validator | Checks exact planned paths, unique safe paths, required confirmed details, shared-context references, and target-native frontmatter. Passing validation is required before review and write. |
+| Artifact manager | Snapshots the destination and the full create/replace set, binds approval to those snapshots, rejects unsafe paths and symbolic links, and applies files atomically one at a time. Files are never deleted. |
 
-Use the local Ollama endpoint by default. The user can configure a supported provider and model; do not silently switch to another provider when the configured one is unavailable. Use the shared interface for both local and external models, while keeping provider-specific credentials in runtime environment configuration rather than session data or generated files. Do not include credentials in error messages. Reject provider endpoint URLs with user information, query strings, or fragments so they cannot be used as alternate credential channels.
+## Browser workflow
 
-Treat only a loopback Ollama endpoint as local. The CLI identifies a cloud provider or remote Ollama endpoint, explains that it will receive the request, selected choices, follow-up answers, and confirmed setup requirements, and obtains approval before sending them. The CLI does not claim to verify provider retention practices and tells the user to review the provider's terms. It also warns that user text is not scanned for secrets and reports the session database path and deletion limits.
+1. An administrator creates user accounts in Django admin. Users sign in and configure their own model provider and credentials.
+2. A user starts a session with a natural-language request. The user selects task type and target agent explicitly; the target is separate from the model provider.
+3. The user may opt in to a topic-based requirements interview and ask related questions. The app shows the provider disclosure and obtains approval before external-provider requests. The model chooses focused follow-up topics and decides when the collected information is sufficient. Extracted requirements are grounded in user statements, and readiness checks remain authoritative.
+4. The app presents the structured requirements summary. Users can edit confirmed values and open choices. Material blockers prevent generation.
+5. Before generation, the user reviews and approves the provider disclosure when required. Generation uses reviewed requirements and the configured provider.
+6. Generated files are validated and previewed. The user selects an existing project directory inside their own workspace, reviews every file to create or replace, and approves the entire set.
+7. The graph checkpoints the active prompt, chat transcript, and full workflow state. Users can resume, restart from editable requirements without generated files, or delete their own saved session. Deletion does not guarantee secure erasure.
 
-### Current task profiles and target capabilities
+The browser session UI maps each graph interrupt to a page action. External-provider interview approval is bound to the selected provider and endpoint. If either setting changes, the user can review the updated disclosure and approve it again from the active session without restarting. The UI must not bypass provider approval, material-requirement gates, validation failures, stale artifact checks, or full-set write approval. The graph remains the source of truth for workflow progression. The full interview transcript is passed to generation as separate contextual input; reviewed requirements remain authoritative, and transcript content does not satisfy readiness gates.
 
-Deterministic question templates and task profiles guide required follow-up questions. They do not replace or override user requirements. For data science, both the data source and analysis goal must be confirmed before provider disclosure for generation or request. For a custom task, clarify its goal, inputs and outputs, success criteria, and constraints; assess support before generation. Do not present an unassessed or unsupported custom task as complete.
+The web interview renders predefined answers as accessible Bootstrap choice
+controls: task types allow multiple selections, while target, yes/no, and
+custom-task support choices allow one selection. Open-ended prompts remain text
+responses. The shared navbar in `webapp/base.html` is sticky across application
+pages.
 
-Interview assistance is disabled unless the user enters `:ai` at an interview prompt. Show the configured provider and data disclosure before a request; obtain explicit approval for external providers. `:suggest` requests at most three validated, optional questions, then lets the user select which to answer. `? <question>` asks for guidance on how to answer the active deterministic question. Store selected responses as supplemental answers, include them in the reviewed summary and generation context, and never use them to satisfy deterministic readiness gates. Coaching is advice only and must not change or confirm an answer. If provider settings change, require fresh approval before interview assistance can continue.
+## Security and privacy
 
-| Target | Core instructions | Shared context | Task-type instructions | Path-scoped instructions |
-| --- | --- | --- | --- | --- |
-| Claude Code | `CLAUDE.md` | `AGENTS.md` | `.claude/rules/task-<name>.md` | `.claude/rules/path-<name>.md`, with `paths` frontmatter |
-| GitHub Copilot | `.github/copilot-instructions.md` | `AGENTS.md` | `.github/instructions/task-<name>.instructions.md`, with `applyTo: "**"` | `.github/instructions/path-<name>.instructions.md`, with `applyTo` set to the exact confirmed glob |
+- Django authentication protects application pages. Accounts are administrator-managed; there is no public registration flow.
+- Session thread lookup is keyed by the authenticated user's database ID. Each account has one active thread. Legacy unowned CLI threads are not adopted by web accounts.
+- Django's database file is prepared with restrictive file permissions. Provider credentials use authenticated Fernet encryption at rest; losing or changing the encryption key makes saved credentials unreadable.
+- Configured provider credentials are excluded from LangGraph state, templates, generated files, operational error text, and explicit log fields. User-provided text is not scanned or redacted; if a user includes a secret in that text, it can appear in saved state, provider requests, generated files, and logs.
+- Django application logs include raw interview text, model prompts and responses, generation output, validation finding codes and artifact paths, and workflow error codes. One operator-only file is created per web process under `logs/`; the directory uses mode `0700` and files use mode `0600`. Logs are shared across accounts and are not removed when a session is deleted. The operator must manage retention and deletion. This content-bearing logging applies to the web application, not the legacy CLI.
+- Django application logging uses `HARNESS_CREATOR_LOG_LEVEL` (`INFO` by default, `DEBUG` for unsupported values). Logs contain sensitive session content and must be protected and retained by the operator.
+- External provider use requires a disclosure describing the data categories sent. The app does not claim to verify provider retention.
+- User text is not scanned or redacted for secrets. It can be checkpointed, sent after approval, or included in generated instructions.
+- CSRF middleware protects state-changing requests. Session cookies use `HttpOnly` and both session and CSRF cookies use `SameSite=Lax`; cookies require HTTPS outside local development.
+- Each user can select destinations only inside `HARNESS_WORKSPACE_ROOT/<account-id>`. The artifact manager additionally checks path safety and symbolic links. The workspace root must be access-controlled by the operator.
+- Bootstrap CSS is loaded from jsDelivr. No requirements or generated file content is sent to that asset host.
 
-The product treats `AGENTS.md` as shared instructions and context, not as target settings. Claude Code rules use `.claude/rules/`; GitHub Copilot uses repository instruction files. On GitHub.com, path-specific Copilot instructions are supported for cloud agent and code review; other Copilot surfaces may not load them. See the [Claude Code memory and rules documentation](https://code.claude.com/docs/en/memory) and [GitHub Copilot repository instructions documentation](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions). Offline validation does not prove that a target discovers or applies an artifact on every product surface.
+## Deployment and configuration
 
-Path-scoped outputs require exact, relative glob patterns supplied and confirmed by the user. Preserve each pattern without normalization or broadening. Do not plan path-scoped files when no pattern is confirmed. Quote patterns as data in frontmatter so user text cannot create additional YAML fields.
+Use `uv sync --locked`, configure `DJANGO_SECRET_KEY` and
+`HARNESS_CREDENTIAL_ENCRYPTION_KEY`, run `python manage.py migrate`, create an
+administrator with `python manage.py createsuperuser`, and start Django with
+`python manage.py runserver` for local development. Do not enable `HARNESS_DEBUG`
+in a hosted deployment. Configure `HARNESS_ALLOWED_HOSTS`,
+`HARNESS_CSRF_TRUSTED_ORIGINS`, and HTTPS at the serving proxy as required.
 
-Before an external provider request, show the provider and the data categories that can be sent: the initial request, selected choices, follow-up answers, and confirmed setup details. Warn that user text is not scanned or redacted and can be saved, sent to the approved provider, or included in generated files. Do not claim that provider retention practices are verified. Bind approval to the selected provider and endpoint; if either changes, request approval again. Use `create_authorized_chat_model` for provider-backed work. It blocks requests until task and target choices are present, applies the data-science source-and-goal gate, and requires current approval for external providers. Only loopback Ollama endpoints do not need external-provider approval.
+The Django account/profile database and LangGraph checkpoint database are
+separate. Back up both databases and the credential encryption key. The default
+workspace root is `workspaces/`; users must place projects within their own
+account subdirectory before selecting them. Production deployments must provide
+appropriate filesystem isolation and backups for the workspace root.
 
-### Generation planning and offline validation
+## Extension boundaries and limits
 
-Create a deterministic plan only after the requirements summary is reviewed, material choices are resolved, and the selected target supports every requested artifact. Send only reviewed, confirmed requirement values and selected choices to generation; do not include the raw initial request in the generation prompt. The plan sets every file path and purpose. The provider returns content keyed by a planned artifact identifier; it cannot choose or add paths. The application adds target-specific frontmatter to scoped files from the exact confirmed glob pattern.
-
-Use structured provider output and allow no more than three total generation attempts. Retry invalid structure or content that fails offline validation with corrective findings. Do not retry provider availability errors or switch providers. Preserve the final incomplete or failed result for review, but only a `pass` validation result can be written.
-
-Offline validation checks safe unique planned paths, the complete planned file set, non-empty content, the exact planned target path and type, target-native frontmatter, a core-file reference to `AGENTS.md`, the shared-context and target-settings distinction, and each confirmed requirement verbatim in both core instructions and `AGENTS.md`. These checks do not prove semantic correctness, absence of unconfirmed content, automatic file discovery, or behavior on every target product surface.
-
-### Artifact review and approved writes
-
-The artifact manager accepts only a writable generation result with passing validation. It resolves an existing selected project directory and presents the complete create-or-replace set, each file purpose, and any directories that it will create. The CLI previews generated contents before destination selection. The review and write-approval receipt are bound to the destination identity, planned file content, affected file and directory snapshots, and generation fingerprint. Applying a review requires the same generation draft and approval; it rechecks the snapshots before each write and rejects symbolic links and non-regular file conflicts.
-
-New directories use owner-only `0700` permissions, new files use owner-only `0600` permissions, and replaced files retain their existing permission bits. Each file is written through a temporary file and atomically created or replaced; the full multi-file set is not a transaction. If a later write fails, the error reports files already applied and directories created. The writer does not delete files.
-
-### Provider configuration and logging
-
-Load runtime settings from the environment and `.env` without replacing values already set in the process environment. `HARNESS_LLM_PROVIDER` accepts `ollama`, `openai`, `azure_openai`, `meta`, `google_gemini`, or `anthropic`; it defaults to `ollama`. `HARNESS_LLM_MODEL` selects the model, or the Azure deployment name. When it is unset for Ollama, use `llama3.2`; other providers require it.
-
-Use `HARNESS_OLLAMA_BASE_URL` for Ollama's endpoint (default `http://localhost:11434`), `HARNESS_OPENAI_BASE_URL` for an OpenAI-compatible endpoint (default `https://api.openai.com/v1`), and `HARNESS_META_BASE_URL` for Meta's endpoint (default `https://api.llama.com/compat/v1`). Azure OpenAI uses `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_API_VERSION` (default `2024-10-21`). Read credentials at runtime from `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `LLAMA_API_KEY`, `GOOGLE_API_KEY`, or `ANTHROPIC_API_KEY`, as appropriate. Provider adapters return LangChain's shared chat-model interface. Do not log credentials or expose them in configuration errors. Reject configured endpoint URLs that are not HTTP(S), or that contain user information, a query, or a fragment. Pass explicit validated endpoints to adapters; do not let an SDK silently select an alternate endpoint from its own environment variables.
-
-Configure operational logging once per CLI run. Create a local-time, second-resolution file under `logs/` in the current working directory, and use a collision-safe suffix for simultaneous runs. Create each log file with owner-only permissions. Use `HARNESS_CREATOR_LOG_LEVEL`, defaulting to `INFO` and using `DEBUG` for unsupported values. Log operational events only, not requirements, conversation content, provider prompts or responses, or credentials.
-
-## Main flow
-
-Run the CLI with `uv run harness-gen` or `uv run python -m harness_gen`. When a session is active, choose resume, restart, delete, or quit. Enter `:pause` or `:quit` at a requirements or workflow prompt to preserve the checkpoint and exit.
-
-1. Start or restore a session in the terminal. A new session collects a natural-language request and starts a graph thread. A resumed session continues the saved thread from its SQLite checkpoint. The menu supports resume, restart, and deletion. Enter `:pause`, `:quit`, EOF, or interrupt at a supported prompt to keep the active checkpoint and exit.
-2. Gather requirements. The CLI asks deterministic task-profile questions and checkpoints each response. These templates remain the authoritative source for required answers and readiness gates. The user may opt in with `:ai` to enable provider-backed assistance after disclosure and any required approval. At interview prompts, `:suggest` requests up to three additional questions; validate, label, and present them as optional, then let the user choose which to answer. Store those answers separately and do not use them to satisfy readiness gates. Enter `? <question>` to ask for coaching on an active deterministic question; show the advice without changing or confirming the answer. Capture the user's purpose, tasks, operating context, constraints, desired outputs, selected task types, target agent, optional scoped instruction outputs, and confirmed setup details that affect the requested harness. For Data Science, require a confirmed data source and analysis goal before provider approval for generation; if either is unknown, keep it unresolved and block generation until corrected. Ask about platform, runtime, dependencies, configuration, or verification in the guided interview. Record required credentials as local placeholders, not values. Show the target agent as a supported choice separate from the model provider. Explain that Ollama is a provider, not an agent target, and re-prompt before any provider request if the target is invalid. Explain unsupported custom tasks or targets instead of silently substituting another capability.
-3. Review requirements. Summarize the confirmed requirements, selected task types, exact user-entered path patterns, setup details, and unresolved choices that could materially affect the result. Confirmed review also confirms the exact path patterns. Let the user edit the structured requirements. Do not generate final files until material questions are resolved or clearly recorded as limitations.
-4. Plan and generate. Block final generation when material choices remain unresolved. Otherwise, send the reviewed requirements to the explicitly configured provider and request complete file contents for the exact supported paths. Use the selected target's conventions, preserve confirmed context across files, and create path-scoped files only for exact user-confirmed relative glob patterns.
-5. Validate and present. Check safe paths, required confirmed details, shared-context references, and target-specific frontmatter. Report pass, incomplete, or failure status, then display and store the generated files. Only passing files can be written. For an approved write, the user selects an existing project directory and reviews the exact files to create or replace before approving the set. Writes reject unsafe paths and symbolic links, and each file is replaced atomically. The CLI does not delete project files. Offline checks do not prove semantic correctness or automatic `AGENTS.md` discovery.
-6. Pause, resume, or restart as requested. The graph checkpointer preserves the complete thread state, including interview answers, interrupts, and generated files. Resume continues the same thread. Restart creates a new thread with prior requirements and choices as editable starting points, but without prior generated files; it does not delete project files or other user content. The CLI retains one active or most-recent thread until deletion. Deletion removes checkpoint records but does not guarantee secure erasure. The current custom session record is not migrated, so it cannot be resumed after migration.
-
-## State and consistency
-
-The graph thread is the unit of work. Keep confirmed requirements, task and target selections, unresolved questions, generated files, and their status together in the checkpointer so they can be restored and reviewed. Verify that interruption, resumption, and failure recovery preserve a coherent checkpoint. Do not migrate the current custom session record; start with an empty graph checkpoint store after cutover.
-
-All generated files for a session must derive from the same confirmed requirements and selected target. When the user changes a confirmed requirement, update the shared session state and regenerate or revalidate affected outputs; do not leave known contradictions between files. Preserve the distinction between confirmed input, unresolved assumptions, generated content, and user-supplied content.
-
-Do not ask users to enter secret values in requirements or generated content. Configured provider credentials are not part of session requirements and must not appear in application errors. The CLI does not scan or redact arbitrary user text; user-entered text can be saved, sent after approval, or included in generated files. Warn users of this limit and do not claim secure erasure of deleted database content.
-
-## Extension boundaries
-
-- Add deterministic questions in `question_templates.py` and task-profile data without changing the meaning of existing requirements or allowing model assistance to change readiness.
-- Add a target adapter to the capability catalog to declare its supported artifact kinds, conventions, and limitations. Gate generation and compatibility claims on that support.
-- Add output paths and target-format checks only for artifacts supported by the selected target. Keep LLM orchestration independent from target-specific conventions.
-- Add validators alongside the formats and capabilities they check. A result is validated only to the extent that the available checks demonstrate.
-- Keep orchestration independent from individual task profiles, target conventions, output planning, and validators. Extensions must not silently change previously supported behavior.
-
-Document supported tasks, targets, file types, and validation limits as those capabilities become available. Do not infer support solely from an output that can be generated.
-
-## Failure handling and safety
-
-Surface actionable errors when requirements cannot be clarified, a target or task is unsupported, generation fails, validation reports an issue, or SQLite checkpoint reads and writes fail. Identify affected outputs and the next action when one is available. Preserve recoverable session state and generated files when a session pauses or a step fails. After a checkpoint write failure during file application, inspect the project before resuming.
-
-Create the `logs/` directory when needed and use a unique file for every CLI run. Default to `INFO` logging; use `DEBUG` if `HARNESS_CREATOR_LOG_LEVEL` is unsupported. Log operational events without raw requirements, conversation content, provider prompts or responses, or credentials.
-
-Before writing into a destination that contains user content, show what would change and get approval. Do not overwrite or delete content without that approval. Make the source and status of each presented artifact clear.
-
-Limit access to the checkpoint database and newly created generated files with restrictive file permissions; preserve the permissions of approved files that are replaced. Define and communicate the checkpoint path, retention, and removal behavior. Keep configured provider credentials out of graph state and application errors. Explain data handling before external transmission, and ensure retention and removal descriptions match actual implementation behavior. Verify the SQLite checkpointer's file-permission and thread-deletion behavior before claiming it meets these requirements.
-
-## Verification guidance
-
-Run the automated suite with `uv run python -m unittest discover -s tests`, check the lock with `uv lock --check`, and build with `uv build`. The tests use fake generators where appropriate and do not make live provider requests. They cover requirements review and correction; graph routing and interrupt recovery; unsupported targets and task gates; unresolved data-science and custom requirements; exact scoped patterns; offline validation; restart without generated state; thread deletion without project-file deletion; checkpoint read/write failure recovery; credential exclusion from graph state; non-import of legacy session rows; complete provider data-category disclosures; logging without raw requirements; and full-set write approval. Live provider behavior, provider retention, and target behavior outside the offline capability checks are not verified.
+- Add or update task requirement fields in `question_templates.py`; the topic
+  interview can extract them, while deterministic readiness checks remain
+  authoritative.
+- Add supported provider adapters through the shared provider interface.
+- Add target capabilities to the typed catalog. Do not claim support solely
+  because the application can render text.
+- Add artifact validation for the supported file format and preserve the
+  explicit review/write approval boundary.
+- Offline checks do not prove semantic correctness, target discovery, or actual
+  behavior in every target surface. Live provider behavior and retention are not
+  verified by the test suite.

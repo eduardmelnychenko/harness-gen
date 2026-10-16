@@ -238,6 +238,40 @@ class SessionPersistenceTests(unittest.TestCase):
                 with self.assertRaises(SessionPersistenceError):
                     manager.start({"request": "Second request."})
 
+    def test_account_sessions_are_isolated_and_lifecycles_do_not_cross(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            settings = _settings(Path(temporary_directory) / "shared.db")
+            with SessionManager(settings, owner_id="account-a") as first:
+                first_ref = first.start({"request": "Account A request."})
+            with SessionManager(settings, owner_id="account-b") as second:
+                second_ref = second.start({"request": "Account B request."})
+                self.assertNotEqual(first_ref.thread_id, second_ref.thread_id)
+                self.assertEqual(second.state()["request"], "Account B request.")
+
+            with SessionManager(settings, owner_id="account-a") as first:
+                self.assertEqual(first.state()["request"], "Account A request.")
+                first.restart()
+                self.assertNotEqual(first.active_thread_id, first_ref.thread_id)
+                first.delete()
+
+            with SessionManager(settings, owner_id="account-b") as second:
+                self.assertEqual(second.active_thread_id, second_ref.thread_id)
+                self.assertEqual(second.state()["request"], "Account B request.")
+
+    def test_account_session_does_not_adopt_legacy_unowned_thread(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            settings = _settings(Path(temporary_directory) / "shared.db")
+            with SessionManager(settings) as legacy:
+                legacy.start({"request": "Unowned legacy checkpoint."})
+
+            with SessionManager(settings, owner_id="account-a") as account:
+                self.assertIsNone(account.active_thread_id)
+                account.start({"request": "Account-specific checkpoint."})
+                self.assertEqual(
+                    account.state()["request"],
+                    "Account-specific checkpoint.",
+                )
+
     def test_restart_keeps_requirements_but_drops_generated_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             project_file = Path(temporary_directory) / "project" / "AGENTS.md"

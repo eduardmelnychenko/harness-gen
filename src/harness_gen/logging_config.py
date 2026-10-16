@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import stat
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -61,11 +62,18 @@ def configure_logging(
 ) -> Path:
     """Configure a private, timestamped log file and return its path.
 
-    Callers must log operational events only. Do not pass requirements,
-    provider prompts or responses, credentials, or other user content.
+    The web application can use this handler for stage-level records that
+    include user or provider content. Callers must never pass provider
+    credentials.
     """
     directory = log_directory or Path.cwd() / "logs"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory_stat = directory.lstat()
+    if stat.S_ISLNK(directory_stat.st_mode) or not stat.S_ISDIR(
+        directory_stat.st_mode
+    ):
+        raise OSError("The log directory must be a real directory.")
+    os.chmod(directory, 0o700)
     timestamp = (run_started_at or datetime.now()).strftime("%Y%m%d-%H%M%S")
     path, stream = _create_unique_log_file(directory, timestamp)
 

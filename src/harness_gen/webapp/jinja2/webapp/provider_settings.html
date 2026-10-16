@@ -1,0 +1,27 @@
+{% extends "webapp/base.html" %}
+{% block title %}Provider settings · Harness Generator{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="h2">Model provider</h1>
+    <p class="text-body-secondary">Provider settings belong to your account. Provider credentials are encrypted at rest and are not included in session checkpoints.</p>
+    <div class="alert alert-warning">Do not enter credentials in a harness request. The app needs <code>HARNESS_CREDENTIAL_ENCRYPTION_KEY</code> to save API keys.</div>
+    <div class="card"><div class="card-body">
+      {% for error in form.non_field_errors() %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+      <form method="post">
+        {{ csrf_input }}
+        {% for field in form %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit">Save provider settings</button>
+        <a class="btn btn-link" href="{{ url('home') }}">Cancel</a>
+      </form>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

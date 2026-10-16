@@ -19,9 +19,11 @@ The product gathers requirements and generates harness files. It does not promis
 * The product must accept requirements expressed in natural language.
 * It must gather enough information to define the requested harness, including its purpose, tasks, operating context, constraints, and desired outputs.
 * It must let the user select one or more task types: regular software development, a machine learning (ML) task, or a data science task. It must also offer an `Other/custom` option for work that does not fit these categories. The product must use the selection to guide follow-up questions and capture relevant requirements without overriding the user's specific needs.
-* Deterministic core and task-profile question templates must be managed separately from optional model-generated interview questions. Deterministic questions remain mandatory where required and authoritative for all readiness gates.
-* The user may opt in to provider-backed interview assistance. Before interview content is sent to a provider, the product must show the provider disclosure and obtain approval when required. The model may suggest up to three additional questions; the product must validate them, label them optional, and let the user choose which to answer. Supplemental answers may add context but must not replace deterministic answers or satisfy readiness gates.
-* During the interview, the user may ask the model for guidance on how to answer an active deterministic question. Coaching must not populate, confirm, or change the user's answer. If the user does not opt in, the deterministic interview must work as before without model requests.
+* The interview must use topic-based follow-up instead of requiring users to answer a fixed sequence of core and task-profile questions. After the user opts in, the configured model must choose useful follow-up topics from the request and conversation, and decide when it has collected enough information to stop. Before interview content is sent to a provider, the product must show the provider disclosure and obtain approval when required. The model must extract only user-stated requirements; its completion decision and extracted values do not override readiness checks or user review.
+* Task type and supported agent target remain explicit validated choices. Existing material-requirement gates remain authoritative; if the model says the interview is complete while a required detail is missing, the product must ask a focused follow-up or block generation.
+* The web interview must show the initial request, topic-based questions and answers, and optional model-assistance exchanges in one ordered chat. During the interview, the user may ask the model any related question. A model reply is guidance and must not populate, confirm, or change the user's answers.
+* The web interview must show predefined answers as clickable, accessible choices instead of requiring users to type them. It must use multi-select controls for task types and single-select controls for agent target, yes/no answers, and custom-task support. Open-ended questions must remain text responses.
+* The complete interview chat must be retained for the session and included as separate, non-authoritative context when generating harness files. The reviewed requirements remain authoritative; assistant replies and unconfirmed discussion must not satisfy readiness gates. If the user does not opt in, the deterministic interview must work as before without model requests.
 * Before a data-science session is ready, it must collect a user-confirmed data source and analysis goal. Unknown details must remain unresolved. It must ask about platform only when platform affects setup or use.
 * For `Other/custom`, the product must ask focused questions to understand the task and its requirements. If it cannot support the clarified task, it must explain the limitation and must not present incomplete output as a complete harness.
 * The user must be able to choose a supported target agent. The product must distinguish the target agent, which determines generated file formats, from the LLM provider, which receives requirements. Ollama is a provider, not an agent target. Show supported targets as clear choices; if the user enters a provider name or unsupported target, explain the difference and ask them to choose a supported target before sending requirements.
@@ -32,6 +34,9 @@ The product gathers requirements and generates harness files. It does not promis
 * It must let the user correct or clarify that summary before files are finalized.
 * It must communicate limitations, missing information, and failures in terms the user can understand, and identify what input or action is needed next.
 * The user may pause, resume, or restart a session at any time. Pause and resume must preserve and restore the full session state, including confirmed requirements, selected task types and target agent, unresolved questions, and generated files. Restart must begin a new session with the prior requirements and choices carried over as editable starting points, but without carrying over generated files. Restart must not delete files already generated or other user files.
+* The product must provide an authenticated Django web interface using Jinja2 templates and Bootstrap 5 or later. Accounts must be created by an administrator. Each account must have one active session and must not access another account's requirements, generated files, or provider configuration.
+* The shared web navigation header must remain visible while the user scrolls on any application page.
+* Each account must be able to configure its own model provider and model. Provider credentials must be encrypted at rest with a key supplied by the server operator and must not be included in session state.
 
 ### LLM provider configuration
 
@@ -59,6 +64,7 @@ The product gathers requirements and generates harness files. It does not promis
 * The product must not silently overwrite existing user content. Before replacing or deleting user content, it must explain the effect and get the user's approval.
 * When generation fails or validation does not pass, the product must identify the affected outputs and must not present them as ready to use.
 * Before writing generated files, the product must show the selected project directory and identify each file to create or replace. It must obtain approval for the full set of changes and block writes after failed or incomplete validation.
+* The web application must limit each account's project destinations to its own configured workspace. It must not accept arbitrary server paths from browser input.
 
 
 ### Language and terminology
@@ -72,10 +78,13 @@ The product gathers requirements and generates harness files. It does not promis
 ### Security and privacy
 
 * The product must protect user requirements, conversation content, and generated files from unauthorized access.
+* The product must authenticate users and enforce account ownership on every session and provider-profile operation.
 * Configured provider credentials must not be included in saved sessions, generated files, or application error messages. The product must not ask users to enter real secret values in requirements or generated content.
+* Per-account provider credentials must be encrypted at rest. The operator must supply and back up the encryption key; loss of the key can make saved provider credentials unreadable.
 * Setup requirements must refer to credentials through local placeholders or environment-variable names, not credential values.
 * The product does not scan or redact arbitrary user text for secrets. It must warn users not to enter secret values and explain that user-provided text can be saved, sent to an approved provider, or included in generated files.
 * The product must explain relevant data handling, including whether session content is stored, where it is sent, and when it is removed. It must not claim privacy or retention guarantees that the implementation does not provide.
+* The web application must record raw interview text, provider prompts and responses, generated model output, validation finding codes and artifact locations, and workflow error codes in one operator-only log file per process. The file is shared across accounts, uses restrictive filesystem permissions, and is not removed when a session is deleted. The application must disclose this behavior to users and must not explicitly log configured provider credentials. Arbitrary user text is not scanned, so user-entered secrets can still appear in logs.
 * Any external service or model use must be made clear to the user before data is sent to it.
 
 ### Reliability and correctness
@@ -83,8 +92,8 @@ The product gathers requirements and generates harness files. It does not promis
 * The product must preserve confirmed requirements throughout a session and must not report success when required generation or validation steps have failed.
 * The product must report actionable errors when it cannot continue, generate a requested file, or validate an output.
 * Generated files must conform to their declared formats. Where automated validation is available, the product must use it and report its result.
-* The CLI must create a separate operational log file for each run in a `logs/` directory under the current working directory. The file name must include the local run-start timestamp to seconds; simultaneous runs must not overwrite each other's logs.
-* `HARNESS_CREATOR_LOG_LEVEL` must configure the log level. Use `INFO` when it is unset and `DEBUG` when its value is unsupported. Logs must not include raw requirements, conversation content, provider prompts or responses, or credentials.
+* The web application must log stage-tagged interview text, provider prompts and responses, generation output, validation finding codes and locations, and workflow error codes. It must exclude configured provider credential fields from log records.
+* `HARNESS_CREATOR_LOG_LEVEL` must configure the application log level. Use `INFO` when it is unset and `DEBUG` when its value is unsupported.
 * `HARNESS_DB_URL` must configure the database connection URL. Use `sqlite:///data/harness.db` when it is unset or unsupported.
 
 ### Maintainability and extensibility
@@ -98,7 +107,7 @@ The product gathers requirements and generates harness files. It does not promis
 * The conversation must present one clear question or decision at a time when user input is needed.
 * The user must be able to understand progress, review important decisions, and know how to resume or correct the work when supported by the application.
 * Errors and limitations must include a clear next action when one is available.
-* User-facing flows must be usable with the accessibility capabilities supported by the product's interface and target environment.
+* Predefined interview choices must be operable by keyboard and exposed as labelled controls. User-facing flows must be usable with the accessibility capabilities supported by the product's interface and target environment.
 
 ## Acceptance criteria
 
@@ -107,8 +116,8 @@ A harness-creation session meets the product requirements when:
 * The user can describe a harness request in natural language.
 * The user can select one or more of regular software development, an ML task, or a data science task, and the product uses those selections to guide requirements and generated outputs.
 * The user can select `Other/custom`; the product clarifies the task requirements or explains why it cannot support the task before presenting generated output as complete.
-* Deterministic question templates remain the source of required answers and readiness gates. When the user opts in, the product discloses and obtains any required provider approval before sending interview content, validates and labels up to three LLM suggestions as optional, and lets the user select which to answer.
-* Optional answers are stored separately and do not satisfy or replace deterministic readiness gates. The user can request coaching on an active deterministic question; coaching is shown as advice and does not change the answer. Without opt-in, no LLM request is made during the interview.
+* After opt-in and any required provider approval, the model selects follow-up topics and decides when requirements are sufficient; existing material-readiness checks remain authoritative. Without opt-in, the deterministic interview remains available and no interview model request is made.
+* The user can ask the model related questions during the interview; the full conversation is visible and included as separate context for generation. Model replies are advice and do not change answers.
 * The user can select Claude Code or another supported agent as the target from a clear list. If the target is unsupported or unclear, the product explains the limitation and asks the user to choose again.
 * The product makes clear that Ollama is an LLM provider, while Claude Code and GitHub Copilot are agent targets that determine generated file formats.
 * The product asks for material missing or unclear information instead of silently guessing.
@@ -122,7 +131,10 @@ A harness-creation session meets the product requirements when:
 * Task-specific instructions reflect the selected task types. Path-scoped instructions use only relative patterns that the user supplied and confirmed during review.
 * The user can access the generated harness files and understand their purpose and required setup. Before a project write, the user sees the selected directory and each file to create or replace; any validation status other than pass blocks writing.
 * User requirements, conversation content, and generated files are protected from access by unauthorized users.
+* Each signed-in account can access only its own session and provider configuration. Generated project writes remain within that account's workspace.
+* The product uses a Django web UI with Jinja2 and Bootstrap 5 or later; user accounts are created by an administrator.
 * Configured provider credentials are not saved with session content or exposed in application errors. The product warns users not to enter secret values. It does not detect or redact secrets that users include in requirements, so such text can be stored, sent after provider approval, or included in generated files.
+* Before entering session text, the user is told that interview content and model inputs and outputs are written to a shared operator-only server log, that session deletion does not remove those log records, and that arbitrary text is not scanned for secrets.
 * Before user data is sent to an external service or model, the product explains which service receives it and the applicable data storage, transmission, and removal practices.
 * The product does not replace or delete existing user content without explaining the effect and obtaining the user's approval.
 * Generated files conform to their declared formats. When automated validation is available, the product runs it and reports the result.

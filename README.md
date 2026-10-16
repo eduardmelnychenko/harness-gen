@@ -1,166 +1,133 @@
 # Harness Generator
 
-Harness Generator turns a description of an AI agent's goals and constraints into
-reviewable instruction files for a supported coding agent. You describe what the
-agent should do; the tool gathers the missing details, creates the files, checks
-their format and content, and asks before it writes them to a project.
+Harness Generator is a Django web application that turns a description of an AI
+agent's goals and constraints into reviewable instruction files. It gathers
+requirements, generates and validates the files, and asks before writing them to
+a project. It creates harness instructions, not application code, project
+scaffolding, runtime settings, or deployment configuration.
 
-It is useful when you want a consistent set of agent instructions without
-designing every file by hand. It creates harness instructions, not application
-code, project scaffolding, runtime settings, or deployment configuration.
+The browser interface uses Django authentication, Jinja2 templates, and
+Bootstrap 5.3. Accounts are created by an administrator. Each account has one
+resumable session, provider configuration, encrypted provider credentials, and
+an isolated workspace.
 
 ## What you can create
 
-- **Software development instructions** for an agent's goals, working context,
-  constraints, and expected outputs.
-- **Machine-learning instructions** tailored to the task and its confirmed
-  setup requirements.
-- **Data-science instructions** that require a confirmed data source and
-  analysis goal before generation can continue.
-- **Custom-task instructions** after the tool has clarified the task and
-  confirmed that it can support it.
-- **Optional task-specific or path-scoped instructions** when you want different
-  guidance for selected task types or exact file patterns.
+- Software development, machine-learning, data-science, and custom-task harness
+  instructions.
+- Instructions for Claude Code or GitHub Copilot, with optional task-specific
+  and path-scoped files.
+- Shared `AGENTS.md` context alongside target-specific instruction files.
 
-Choose a supported target agent separately from the model provider. The target
-sets the instruction-file format:
+The target agent determines file formats. The model provider is configured
+separately for each account. The requirements interview is a saved chat that
+shows the request, questions, and answers. Model assistance is disabled until
+you opt in. After you choose the task type and target, the model can explore
+requirements by topic and decide when it has enough information; required
+readiness checks still apply. You can also ask related questions in the chat.
+Predefined interview answers use clickable choices, while open-ended questions
+use text responses. The shared navigation header stays visible while you scroll.
+The full conversation is included as separate context during generation, while
+reviewed requirements remain authoritative. The application discloses provider
+use and asks for approval before it sends interview or generation content to an
+external provider. If you change the provider or endpoint during an interview,
+you can review and approve the updated disclosure from the active session.
 
-| Target | Core instructions | Shared context |
-| --- | --- | --- |
-| Claude Code | `CLAUDE.md` | `AGENTS.md` |
-| GitHub Copilot | `.github/copilot-instructions.md` | `AGENTS.md` |
-
-Optional task-specific and path-scoped files use each target's supported
-locations. Some Copilot surfaces do not load path-scoped instructions. The tool
-reports this limit when relevant.
-
-## Requirements
+## Requirements and setup
 
 - Python 3.14 or later
 - [uv](https://docs.astral.sh/uv/)
-- A configured model provider. The default is a local [Ollama](https://ollama.com/)
-  service with the `llama3.2` model. Install and start Ollama, then make that
-  model available with `ollama pull llama3.2`, or configure another provider.
 
-The tool also supports OpenAI, Azure OpenAI, Meta's hosted API, Google Gemini,
-and Anthropic Claude. External providers require their own credentials and
-approval before requirements are sent.
-
-## Install and run
-
-From the project directory, install the locked dependencies and start the
-interactive CLI:
+Install the locked dependencies:
 
 ```sh
 uv sync --locked
-uv run harness-gen
 ```
 
-You can also start it as a Python module:
+Set these values in the process environment or a local `.env` file. The project
+ignores `.env`; do not commit it.
+
+| Setting | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Django session and CSRF signing key. Keep it stable and secret. |
+| `HARNESS_CREDENTIAL_ENCRYPTION_KEY` | Fernet key for per-account provider credentials. Keep a secure backup; the application cannot decrypt saved keys if this value is lost or changed. |
+| `HARNESS_DEBUG` | Set to `true` only for local development over HTTP. Leave unset in deployment. |
+| `HARNESS_CREATOR_LOG_LEVEL` | Django application log level. Defaults to `INFO`; unsupported values use `DEBUG`. |
+| `HARNESS_DJANGO_DB` | Django authentication and provider-profile database. Defaults to `data/web.sqlite3`. |
+| `HARNESS_DB_URL` | LangGraph session database. Defaults to `sqlite:///data/harness.db`. |
+| `HARNESS_WORKSPACE_ROOT` | Root for user-owned project workspaces. Defaults to `workspaces/`; each account is restricted to its own subdirectory. |
+| `HARNESS_ALLOWED_HOSTS` | Comma-separated Django host names. Defaults to `localhost,127.0.0.1`. |
+| `HARNESS_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins when the app is served behind a proxy. |
+
+Generate keys with:
 
 ```sh
-uv run python -m harness_gen
+uv run python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-The first run checks the provider configuration, then asks for a natural-language
-description of the harness. Follow the prompts to select task types and a target,
-answer focused questions, and review the requirements summary. Resolve any
-material open questions before generation.
+Create a local `.env` from the example and replace the required placeholders:
 
-The requirements interview uses deterministic questions and readiness checks.
-Optional interview assistance is off until you enter `:ai` at a question. The
-CLI shows the provider disclosure and asks for approval before it sends interview
-content to an external provider. After opt-in, enter `:suggest` to request up to
-three optional questions and choose which ones to answer. Enter `? your question`
-to ask for coaching on the active deterministic question. Suggested questions
-and answers do not replace required questions or readiness checks, and coaching
-does not fill in your answer.
-
-The workflow then requests provider approval when needed, generates and
-validates the planned instructions, and shows the results. To write passing
-files, select an existing project directory, review the full list of files to
-create or replace, and approve the write. The tool does not delete project
-files.
-
-## Configure the model provider
-
-Set configuration in the process environment or in a local `.env` file in the
-working directory. The project ignores `.env`; do not commit it. Provider
-credentials stay in runtime configuration and are not added to session state
-or generated instructions.
-
-| Provider | `HARNESS_LLM_PROVIDER` | Other required settings |
-| --- | --- | --- |
-| Ollama (default) | `ollama` | Optional `HARNESS_LLM_MODEL` (defaults to `llama3.2`); optional `HARNESS_OLLAMA_BASE_URL` (defaults to `http://localhost:11434`) |
-| OpenAI | `openai` | `HARNESS_LLM_MODEL`, `OPENAI_API_KEY`; optional `HARNESS_OPENAI_BASE_URL` |
-| Azure OpenAI | `azure_openai` | `HARNESS_LLM_MODEL` (deployment name), `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`; optional `AZURE_OPENAI_API_VERSION` |
-| Meta hosted API | `meta` | `HARNESS_LLM_MODEL`, `LLAMA_API_KEY`; optional `HARNESS_META_BASE_URL` |
-| Google Gemini | `google_gemini` | `HARNESS_LLM_MODEL`, `GOOGLE_API_KEY` |
-| Anthropic Claude | `anthropic` | `HARNESS_LLM_MODEL`, `ANTHROPIC_API_KEY` |
-
-For example, a local `.env` file for OpenAI has this shape; replace the model
-placeholder locally and provide your own key:
-
-```dotenv
-HARNESS_LLM_PROVIDER=openai
-HARNESS_LLM_MODEL=your-model-name
-OPENAI_API_KEY=your-api-key
+```sh
+cp .env.example .env
 ```
 
-Do not enter keys or other secrets in a harness request. The tool does not scan
-or redact request text. It saves requirements and generated files in its
-session database. It sends content to an external provider only after you
-approve the provider disclosure. Review that provider's data-handling terms.
+Initialize the databases, create the administrator account, and run the
+development server:
 
-## Session and run behavior
-
-The CLI creates or resumes one active session. At startup, it shows the session
-database path, the configured provider, and the operational log path. The
-default database is `data/harness.db` under the current working directory. A
-separate timestamped log file is created under `logs/` for each run; logs record
-operational events, not request text or provider content.
-
-At prompts that accept commands:
-
-- Enter `:pause` to keep the current session and exit. `:quit` also exits and
-  preserves the active checkpoint.
-- Run the CLI again and choose **resume** to continue the saved session.
-- Choose **restart** to begin a new thread with the previous requirements as
-  editable starting points. Generated files are not carried over, and existing
-  project files are not changed.
-- Choose **delete** to remove the saved session checkpoint. This does not
-  delete project files or guarantee secure erasure from storage.
-
-Change the database location with `HARNESS_DB_URL`, for example:
-
-```dotenv
-HARNESS_DB_URL=sqlite:///data/harness.db
+```sh
+mkdir -p data
+uv run python manage.py migrate
+uv run python manage.py createsuperuser
+uv run python manage.py runserver 127.0.0.1:8000
 ```
 
-Change the operational log level with `HARNESS_CREATOR_LOG_LEVEL`. The default
-is `INFO`; unsupported values use `DEBUG`.
+Open `http://127.0.0.1:8000/`. Use the Django admin at `/admin/` to create
+accounts and set their passwords. Users configure their own model provider and
+credential after signing in. The `harness-gen-web` command can run Django
+management commands, for example `uv run harness-gen-web check`.
 
-## Deployment
+For hosted use, configure HTTPS, a stable Django secret key, secure database
+backups, trusted hosts/origins, and an access-controlled workspace root.
+`HARNESS_DEBUG` must be unset. SQLite is the default persistence option.
 
-Harness Generator currently runs as a local, interactive CLI. It does not
-provide a web service or a background worker. Install it with `uv` on the
-machine where you want to run it, configure a reachable model provider, and
-launch it from the working directory where you want its session database and
-logs. Back up the session database if you need to preserve a session.
+## Provider and data handling
+
+The application supports Ollama, OpenAI, Azure OpenAI, Meta's hosted API, Google
+Gemini, and Anthropic Claude. Provider credentials are encrypted in the Django
+database using `HARNESS_CREDENTIAL_ENCRYPTION_KEY`. They are not included in
+LangGraph checkpoints, generated files, or operational errors.
+
+Requirements, interview answers, and generated files are stored in the
+checkpoint database. The app does not scan or redact arbitrary user text.
+External providers receive session content only after the user approves the
+disclosure. The app does not verify provider retention practices; review the
+provider's terms. Deleting a session removes checkpoint records but does not
+guarantee secure erasure from storage media.
+
+The web application also records interview text, model inputs and outputs, and
+validation results with finding codes and artifact locations in a shared
+operator log under `logs/`. Log files are restricted to the application
+operator, but are not separated by account and are not removed when a session
+is deleted. The application does not scan arbitrary user text for secrets, so
+do not enter passwords, API keys, or other secret values. The configured
+provider credential is not written to the log. There is no automatic log
+retention or deletion policy; the operator must manage these files.
+
+Generated files are written on the application host. The app creates a
+workspace under `HARNESS_WORKSPACE_ROOT/<account-id>` and only allows project
+destinations directly inside that account's workspace. Place existing project
+directories there before selecting a destination. The complete create/replace
+set is reviewed and approved before any write. Existing files are never deleted.
 
 ## Important limits
 
-- Generated files contain agent instructions and shared context. They are not
-  an implementation of the task described in the request.
-- Generation and offline checks do not prove semantic correctness or guarantee
-  behavior on every agent product surface.
-- External-provider calls are not made until you approve the disclosure. The
-  tool does not verify provider retention practices.
-- The active session and generated files are stored in the SQLite checkpoint
-  database. Deleting a session removes checkpoint records, but does not
-  guarantee secure erasure from storage.
+- Generated output contains agent instructions and shared context. It is not an
+  implementation of the described task.
+- Offline validation cannot prove semantic correctness, automatic target file
+  discovery, or behavior on every agent product surface.
+- The application does not verify provider retention practices or guarantee
+  secure erasure of deleted session data.
 
-See [Product Requirements](docs/PRODUCT.md) for the intended behavior and
-[Architecture](docs/ARCHITECTURE.md) for implementation details and validation
-limits. See the [C4 architecture diagrams](docs/architecture-diagrams.md) for
-the system context, container, and component views.
+See [Product Requirements](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md),
+and the [C4 architecture diagrams](docs/architecture-diagrams.md).

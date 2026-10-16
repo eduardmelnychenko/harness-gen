@@ -162,14 +162,14 @@ CORE_QUESTION_PROMPTS = MappingProxyType(
             "List required configuration, using local placeholders only. (Optional.)"
         ),
         "task_type_instructions": (
-            "Create separate task-type instruction files? [y/N]"
+            "Create separate task-type instruction files? Answer yes or no."
         ),
         "path_scoped_instructions": (
-            "Create path-scoped instruction files? [y/N]"
+            "Create path-scoped instruction files? Answer yes or no."
         ),
         "custom_support": (
             "Can the clarified custom task be supported by harness instructions? "
-            "[y]es/[n]o/[u]nsure"
+            "Choose yes, no, or unsure."
         ),
         "path_patterns": (
             "Enter exact relative glob patterns, separated by ';'. Do not enter "
@@ -187,6 +187,25 @@ INTERVIEW_CHOICES = MappingProxyType(
             "4. Other/custom",
         ),
         "target": ("1. Claude Code", "2. GitHub Copilot"),
+    }
+)
+
+INTERVIEW_OPTIONS = MappingProxyType(
+    {
+        "task_types": (
+            ("1", "Software development"),
+            ("2", "Machine learning"),
+            ("3", "Data science"),
+            ("4", "Other/custom"),
+        ),
+        "target": (("1", "Claude Code"), ("2", "GitHub Copilot")),
+        "task_type_instructions": (("yes", "Yes"), ("no", "No")),
+        "path_scoped_instructions": (("yes", "Yes"), ("no", "No")),
+        "custom_support": (
+            ("yes", "Yes"),
+            ("no", "No"),
+            ("unsure", "Unsure"),
+        ),
     }
 )
 

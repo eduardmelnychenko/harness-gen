@@ -1,0 +1,27 @@
+{% extends "webapp/base.html" %}
+{% block title %}Edit requirements · Harness Generator{% endblock %}
+{% block content %}
+<h1 class="h2">Edit reviewed requirements</h1>
+<p class="text-body-secondary">Correct the confirmed details. Material open choices remain unresolved until you update them.</p>
+<form class="card" method="post" action="{{ url('session') }}">
+  <div class="card-body">
+    {{ csrf_input }}
+    <input type="hidden" name="action" value="requirements-save">
+    {% for error in form.non_field_errors() %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+    {% for field in form %}
+      <div class="mb-3">
+        {% if field.field.widget.input_type == "checkbox" %}
+          <div class="form-check">{{ field }}<label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+        {% else %}
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+        {% endif %}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Save corrections for review</button>
+    <a class="btn btn-outline-secondary" href="{{ url('session') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

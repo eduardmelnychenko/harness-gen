@@ -28,6 +28,7 @@ class LoggingConfigurationTests(unittest.TestCase):
 
             self.assertEqual(log_path.name, "harness-20261013-112841.log")
             self.assertEqual(stat.S_IMODE(log_path.stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
             self.assertEqual(logging.getLogger("harness_gen").level, logging.INFO)
 
     def test_simultaneous_runs_get_distinct_names(self) -> None:

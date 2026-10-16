@@ -8,8 +8,11 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=1.13.0",
+    "cryptography>=45",
+    "django>=5.2,<6",
     "google-genai>=2.30.0",
     "httpx>=0.28.1",
+    "jinja2>=3.1",
     "langchain-anthropic>=1.7.6",
     "langchain-core>=1.6.10",
     "langchain-google-genai>=4.4.1",
@@ -23,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-harness-gen = "harness_gen.cli:main"
+harness-gen-web = "harness_gen.web:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/harness_gen"]

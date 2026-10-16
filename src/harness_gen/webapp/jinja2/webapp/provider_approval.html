@@ -1,0 +1,15 @@
+{% extends "webapp/base.html" %}
+{% block title %}Provider approval · Harness Generator{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="h2">Review provider disclosure</h1>
+    <div class="alert alert-warning">{{ disclosure }}</div>
+    <form method="post" action="{{ url('session') }}">
+      {{ csrf_input }}
+      <button class="btn btn-primary" name="action" value="{{ approval_action }}" type="submit">Approve for interview assistance</button>
+      <a class="btn btn-outline-secondary" href="{{ url('session') }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

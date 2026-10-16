@@ -69,6 +69,8 @@ class ProviderApprovalTests(unittest.TestCase):
             "the initial request",
             "selected choices",
             "follow-up answers",
+            "interview questions and answers",
+            "your questions and the model's replies",
             "confirmed setup details",
         ):
             self.assertIn(category, disclosure.render())

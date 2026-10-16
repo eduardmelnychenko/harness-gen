@@ -6,16 +6,25 @@
       "description": "Gather and review confirmed purpose, tasks, operating context, constraints, outputs, and setup requirements; keep material unknowns unresolved.",
       "status": "pass",
       "evidence": [
-        "src/harness_gen/question_templates.py contains the deterministic prompts and task profiles. src/harness_gen/cli.py checkpoints the interview and supports structured review edits. tests/test_cli.py verifies deterministic collection, review, correction, and pause/resume; tests/test_requirements.py verifies supplemental answers do not satisfy readiness gates."
+        "The CLI retains deterministic prompts and task profiles in src/harness_gen/question_templates.py and supports structured review edits. The opted-in web interview uses model-selected topics and a model sufficiency decision, while task type, target, and material readiness checks remain authoritative. tests/test_cli.py, tests/test_interview_assistance.py, and src/harness_gen/webapp/tests.py cover the deterministic fallback, topic turns, readiness safeguards, review, and pause/resume."
+      ]
+    },
+    {
+      "id": "web-interview-chat",
+      "name": "Checkpointed web interview chat",
+      "description": "Show the complete interview in a persistent chat, allow opt-in contextual LLM questions, and pass the transcript to generation without treating it as confirmed requirements.",
+      "status": "pass",
+      "evidence": [
+        "src/harness_gen/webapp/services.py checkpoints the ordered transcript, restores history for legacy interviews, and authorizes LLM chat through the existing opt-in and provider approval flow. src/harness_gen/webapp/jinja2/webapp/session.html presents the conversation in one accessible chat and renders predefined answers as labelled clickable controls; src/harness_gen/webapp/jinja2/webapp/base.html keeps the shared navbar sticky. src/harness_gen/generation.py passes the full transcript as separate context; tests/test_generation.py verifies it is not merged with confirmed requirements. src/harness_gen/webapp/tests.py verifies opt-in enforcement, choice controls and target validation, sticky navigation, pause/resume, legacy history, and context retained through harness generation. All 12 web application tests and the Django system check passed for this change; the full unit suite and live provider calls were not run."
       ]
     },
     {
       "id": "optional-llm-interview-assistance",
       "name": "Optional LLM interview assistance",
-      "description": "Offer user-approved LLM coaching and validated optional follow-up questions without changing deterministic questions or readiness gates.",
+      "description": "Offer an opt-in topic-based LLM interview that selects follow-up topics and decides when requirements are sufficient without bypassing validated choices or readiness gates.",
       "status": "pass",
       "evidence": [
-        "src/harness_gen/interview_assistance.py validates up to three optional questions and provides advice-only coaching. src/harness_gen/cli.py requires :ai opt-in, discloses the provider, requests external approval, lets the user choose suggestions, and stores supplemental answers separately. tests/test_cli.py covers selection, coaching without answer mutation, and external-provider decline; tests/test_interview_assistance.py covers suggestion validation."
+        "src/harness_gen/interview_assistance.py validates structured topic-interview turns and extracts only supported requirement fields. The web application requires opt-in, obtains external-provider approval, preserves the ordered transcript, and applies readiness safeguards before stopping. tests/test_interview_assistance.py and src/harness_gen/webapp/tests.py cover turn validation, topic questions, opt-in, transcript persistence, and a data-science readiness blocker."
       ]
     },
     {
@@ -42,7 +51,7 @@
       "description": "Use the configured provider through a shared interface, default to local Ollama, report configuration failures without fallback, and obtain approval before sending data to an external service.",
       "status": "pass",
       "evidence": [
-        "src/harness_gen/cli.py renders the provider disclosure and approval prompt. tests/test_cli.py verifies that declining remote Ollama stops before generation; tests/test_provider_approval.py verifies that the disclosure names the initial request, selected choices, follow-up answers, and setup details. tests/test_workflow.py verifies approval scope and endpoint changes. Live provider calls were not made."
+        "The web application discloses the initial request, choices, interview questions and answers, user questions, model replies, and setup details before external interview assistance. tests/test_provider_approval.py verifies disclosure contents and approval scope; tests/test_workflow.py verifies approval scope and endpoint changes; src/harness_gen/webapp/tests.py verifies users can re-review and approve changed provider settings in an active session without losing the pending interview prompt. Live provider calls were not made."
       ]
     },
     {
@@ -93,10 +102,10 @@
     {
       "id": "data-protection-and-logging",
       "name": "Data protection and operational logging",
-      "description": "Keep provider credentials out of saved state, generated files, and errors; disclose data handling and log operational events without raw user or provider content.",
+      "description": "Keep configured provider credentials out of saved state, generated files, errors, and explicit log fields; disclose that web logs contain raw interview/model content and validation codes/locations.",
       "status": "pass",
       "evidence": [
-        "src/harness_gen/cli.py wires per-run logging, reports database and deletion behavior, and warns that text is not scanned. tests/test_logging_config.py verifies owner-only timestamped logs and levels; tests/test_cli.py verifies raw requirements are not logged, and tests/test_sessions.py verifies provider credentials are absent from checkpoint state."
+        "src/harness_gen/logging_config.py creates private timestamped logs; src/harness_gen/webapp/apps.py configures the web application's operator-only log, and src/harness_gen/logging_events.py emits content-bearing events only inside web logging scope. Interview and generation stages record prompts/responses; validation records finding codes and locations. tests/test_logging_config.py and tests/test_logging_events.py verify restrictive permissions and event fields; tests/test_generation.py and tests/test_interview_assistance.py verify raw stage content; the authenticated UI and README disclose shared-log retention. User-entered text is not scanned, so a secret included by a user can appear in logs."
       ]
     },
     {
