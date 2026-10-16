@@ -14,6 +14,7 @@ from harness_gen.errors import HarnessError
 from harness_gen.interview_assistance import (
     InterviewAssistant,
     TopicInterviewTurn,
+    _INTERVIEW_ANSWER_FIELDS,
     validate_suggested_questions,
 )
 from harness_gen.logging_config import configure_logging
@@ -106,6 +107,12 @@ class InterviewAssistanceValidationTests(unittest.TestCase):
             with self.subTest(suggestions=suggestions):
                 with self.assertRaises(HarnessError):
                     validate_suggested_questions(suggestions, deterministic)
+
+    def test_topic_schema_enumerates_supported_extracted_requirement_keys(self) -> None:
+        schema = TopicInterviewTurn.model_json_schema()
+        key_schema = schema["$defs"]["ExtractedRequirement"]["properties"]["key"]
+
+        self.assertEqual(set(key_schema["enum"]), _INTERVIEW_ANSWER_FIELDS)
 
     def test_assistant_uses_structured_suggestions_and_returns_coaching(self) -> None:
         model = FakeModel(

@@ -83,7 +83,7 @@ class SuggestedQuestions(BaseModel):
 class ExtractedRequirement(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    key: str
+    key: str = Field(json_schema_extra={"enum": sorted(_INTERVIEW_ANSWER_FIELDS)})
     value: str = Field(min_length=1, max_length=5000)
 
     @field_validator("key")
