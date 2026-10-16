@@ -1,30 +1,35 @@
 # C4 architecture diagrams
 
 This set describes the implemented Harness Generator for contributors and users
-who need to understand its boundaries and data flows. The diagrams use C4 system context, container, component, and code levels.
+who need to understand its boundaries and data flows. The diagrams use C4
+system-context, container, component, and code levels.
 Boxes identify C4 element types and technologies; arrows show the direction and
 purpose of each interaction.
 
 ## System context
 
 `diagrams/c4-context.drawio` shows the authenticated browser user, the Django
-Harness Generator, configured model providers, and the account-owned project
-workspace. Provider transmission and project-file writes are approval-gated.
+Harness Generator, configured model providers, and the account-scoped project
+workspace on the application host. Non-local provider requests require
+disclosure and approval; project-file writes require full-set approval.
 
 ## Containers
 
-`diagrams/c4-containers.drawio` shows the Django web application, account
-database, SQLite checkpoint database, configured application logs, and
-interactions with the model provider and account-owned project workspace.
+`diagrams/c4-containers.drawio` shows the Django web application, Django account
+database, SQLite checkpoint database, operator-only application log files, and
+interactions with the configured model provider and account-scoped project
+workspace. Application logs may contain interview and model content and are
+shared across accounts.
 
 ## Components
 
 `diagrams/c4-components.drawio` expands the web container to show its browser
-views, requirements interview, session/workflow, provider, generation,
-validation, and artifact-writing responsibilities. It answers how a reviewed
-request moves through generation and approval before files are applied. The
-graph checkpoint preserves state; per-account provider credentials are
-encrypted in the Django database.
+views, deterministic requirements interview, optional model-assisted
+topic-based interview, session/workflow, provider, generation, validation, and
+artifact-writing responsibilities. It answers how confirmed requirements move
+through generation and approval before files are applied. The graph checkpoint
+preserves state; per-account provider credentials are encrypted in the Django
+database.
 
 ## Code
 
