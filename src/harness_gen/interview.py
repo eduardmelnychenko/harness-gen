@@ -1,4 +1,4 @@
-"""Reusable deterministic interview and requirements-draft logic."""
+"""Reusable interview and requirements-draft logic."""
 
 from __future__ import annotations
 
@@ -8,12 +8,14 @@ from harness_gen.errors import RequirementsError
 from harness_gen.question_templates import (
     CORE_QUESTION_PROMPTS,
     INTERVIEW_CHOICES,
+    INTERVIEW_OPTIONS,
     TASK_PROFILES,
     FollowUpQuestion,
 )
 from harness_gen.requirements import (
     ConfirmedPathPattern,
     CustomTaskSupport,
+    InterviewMessage,
     RequirementValue,
     RequirementsDraft,
     SetupRequirements,
@@ -40,6 +42,7 @@ def _initial_interview_data() -> dict[str, object]:
         "index": 0,
         "pending_field": None,
         "complete": False,
+        "conversation": [],
     }
 
 
@@ -81,6 +84,17 @@ def _interview_prompt(
         **(
             {"choices": list(INTERVIEW_CHOICES[field])}
             if field in INTERVIEW_CHOICES
+            else {}
+        ),
+        **(
+            {
+                "options": [
+                    {"value": value, "label": label}
+                    for value, label in INTERVIEW_OPTIONS[field]
+                ],
+                "multiple": field == "task_types",
+            }
+            if field in INTERVIEW_OPTIONS
             else {}
         ),
     }
@@ -173,7 +187,10 @@ def _draft_from_interview(
     supplemental_answers = _supplemental_answers_from_interview(
         interview.get("supplemental_answers", [])
     )
-    unresolved: list[str] = []
+    interview_conversation = _interview_conversation_from_state(
+        interview.get("conversation", [])
+    )
+    unresolved = _string_list(interview.get("unresolved_choices"))
     data_source_value = _optional_requirement(data_source)
     analysis_goal_value = _optional_requirement(analysis_goal)
     custom_support = CustomTaskSupport.NOT_ASSESSED
@@ -208,6 +225,7 @@ def _draft_from_interview(
         ),
         task_answers=tuple(profile_answers),
         supplemental_answers=supplemental_answers,
+        interview_conversation=interview_conversation,
         constraints=_confirmed_values(str(answers.get("constraints", ""))),
         desired_outputs=_confirmed_values(str(answers.get("desired_outputs", ""))),
         setup=SetupRequirements(
@@ -253,6 +271,25 @@ def _supplemental_answers_from_interview(
             )
         )
     return tuple(answers)
+
+
+def _interview_conversation_from_state(
+    value: object,
+) -> tuple[InterviewMessage, ...]:
+    if not isinstance(value, list):
+        raise RequirementsError("The saved interview conversation is invalid.")
+    messages: list[InterviewMessage] = []
+    for item in value:
+        if (
+            not isinstance(item, Mapping)
+            or not isinstance(item.get("role"), str)
+            or not isinstance(item.get("content"), str)
+        ):
+            raise RequirementsError("The saved interview conversation is invalid.")
+        messages.append(
+            InterviewMessage(role=item["role"], content=item["content"])
+        )
+    return tuple(messages)
 
 
 def _parse_task_types(value: str) -> tuple[TaskType, ...]:

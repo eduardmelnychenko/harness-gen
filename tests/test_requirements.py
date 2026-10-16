@@ -6,6 +6,7 @@ from harness_gen.errors import RequirementsError
 from harness_gen.requirements import (
     ConfirmedPathPattern,
     CustomTaskSupport,
+    InterviewMessage,
     RequirementValue,
     RequirementsDraft,
     SupplementalAnswer,
@@ -196,6 +197,10 @@ class RequirementsDraftTests(unittest.TestCase):
                     "Version 1 must remain compatible.",
                 ),
             ),
+            interview_conversation=(
+                InterviewMessage("assistant", "What should the harness do?"),
+                InterviewMessage("user", "Maintain the service API."),
+            ),
             constraints=(RequirementValue("No downtime", True),),
             desired_outputs=(RequirementValue("Test plan", True),),
             setup=SetupRequirements(
@@ -249,6 +254,17 @@ class RequirementsDraftTests(unittest.TestCase):
 
         self.assertEqual(
             requirements_from_state(values).supplemental_answers,
+            (),
+        )
+
+    def test_legacy_checkpoint_without_interview_conversation_still_loads(self) -> None:
+        values = requirements_to_state(
+            RequirementsDraft(request="Create project instructions.")
+        )
+        values.pop("interview_conversation")
+
+        self.assertEqual(
+            requirements_from_state(values).interview_conversation,
             (),
         )
 

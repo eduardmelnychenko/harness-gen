@@ -23,7 +23,7 @@
             <label class="form-label" for="{{ form.request.id_for_label }}">{{ form.request.label }}</label>
             {{ form.request }}
             {% for error in form.request.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-            <div class="form-text mb-3">Do not enter passwords, API keys, or other secrets. User text is not scanned or redacted.</div>
+            <div class="form-text mb-3">Do not enter passwords, API keys, or other secrets. User text is not scanned or redacted and may be recorded in the server log.</div>
             <button class="btn btn-primary" type="submit">Start requirements interview</button>
           </form>
         </div>
@@ -34,7 +34,7 @@
     <div class="card border-warning-subtle">
       <div class="card-body">
         <h2 class="h5">Data handling</h2>
-        <p class="small mb-0">Requirements and generated files are stored in your account's session checkpoint. Provider requests are disclosed before data is sent. Your provider API key is encrypted in the application database and is never added to session state.</p>
+        <p class="small mb-0">Requirements and generated files are stored in your account's session checkpoint. Interview text and model inputs and outputs are also recorded in one restricted server log shared with the operator. Deleting a session does not remove log records. Provider requests are disclosed before data is sent. Your configured provider API key is not logged and is encrypted in the application database.</p>
       </div>
     </div>
   </aside>

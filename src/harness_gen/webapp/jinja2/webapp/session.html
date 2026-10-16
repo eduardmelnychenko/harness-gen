@@ -29,61 +29,92 @@
       {% endif %}
     </div>
   </div>
-{% elif phase == "user_input" and prompt.kind == "requirements_interview" %}
-  <div class="card mb-4"><div class="card-body">
-    <h2 class="h4">Requirements interview</h2>
-    <p>{{ prompt.message }}</p>
-    {% if prompt.choices %}
-      <ul class="list-group mb-3">{% for choice in prompt.choices %}<li class="list-group-item">{{ choice }}</li>{% endfor %}</ul>
-    {% endif %}
-    <form method="post" action="{{ url('session') }}">
-      {{ csrf_input }}
-      <input type="hidden" name="action" value="answer-interview">
-      <label class="form-label" for="id_answer">Your answer</label>
-      {{ answer_form.answer }}
-      {% for error in answer_form.answer.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-      <button class="btn btn-primary mt-3" type="submit">Save answer</button>
-    </form>
-    {% if interview.ai_assistance_enabled %}
-      <div class="d-flex flex-wrap gap-2 mt-3">
-        <form method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-primary btn-sm" name="action" value="suggest-questions">Suggest optional questions</button></form>
-        <form class="d-flex gap-2" method="post" action="{{ url('session') }}">
-          {{ csrf_input }}<input class="form-control form-control-sm" name="question" maxlength="2000" placeholder="Ask for coaching">
-          <button class="btn btn-outline-primary btn-sm" name="action" value="coach">Get advice</button>
-        </form>
+{% endif %}
+
+{% if conversation %}
+  <section class="card mb-4" aria-labelledby="interview-chat-heading">
+    <div class="card-header"><h2 class="h4 mb-0" id="interview-chat-heading">Interview chat</h2></div>
+    <div class="card-body">
+      <div class="d-flex flex-column gap-3 mb-4" role="log" aria-label="Interview conversation" aria-live="polite" aria-relevant="additions text">
+        {% for message in conversation %}
+          <div class="d-flex {{ 'justify-content-end' if message.role == 'user' else 'justify-content-start' }}">
+            <div class="rounded p-3 {{ 'bg-primary text-white' if message.role == 'user' else 'bg-body-secondary' }}" style="max-width: 85%; white-space: pre-wrap">
+              <strong class="d-block small mb-1">{{ 'You' if message.role == 'user' else 'Harness assistant' }}</strong>{{ message.content }}
+            </div>
+          </div>
+        {% endfor %}
       </div>
-    {% else %}
-      <form class="mt-3" method="post" action="{{ url('session') }}">{{ csrf_input }}<button class="btn btn-outline-secondary btn-sm" name="action" value="enable-assistance">Opt in to optional model assistance</button></form>
-    {% endif %}
-    {% if coaching %}<div class="alert alert-info mt-3"><strong>Coaching only; your answer is unchanged.</strong><p class="mb-0">{{ coaching }}</p></div>{% endif %}
-  </div></div>
-{% elif interview.suggestion_selection_pending %}
-  <div class="card mb-4"><div class="card-body">
-    <h2 class="h4">Optional model-suggested questions</h2>
-    <p class="text-body-secondary">These questions are optional and do not satisfy requirements readiness checks.</p>
-    <form method="post" action="{{ url('session') }}">
-      {{ csrf_input }}<input type="hidden" name="action" value="select-suggestions">
-      {% for question in interview.suggested_questions %}
-        <div class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" name="question_ids" value="{{ loop.index0 }}" id="suggestion-{{ loop.index0 }}">
-          <label class="form-check-label" for="suggestion-{{ loop.index0 }}">{{ question }}</label>
-        </div>
-      {% endfor %}
-      <button class="btn btn-primary" type="submit">Answer selected questions</button>
-    </form>
-  </div></div>
-{% elif interview.supplemental_pending_questions %}
-  {% set optional_index = interview.supplemental_index|default(0) %}
-  <div class="card mb-4"><div class="card-body">
-    <h2 class="h4">Optional follow-up</h2>
-    <p>{{ interview.supplemental_pending_questions[optional_index] }}</p>
-    <form method="post" action="{{ url('session') }}">
-      {{ csrf_input }}<input type="hidden" name="action" value="answer-supplemental">
-      <textarea class="form-control mb-3" name="answer" rows="3" maxlength="20000"></textarea>
-      <button class="btn btn-primary" type="submit">Save optional answer</button>
-    </form>
-  </div></div>
-{% elif phase == "requirements_review" %}
+
+      {% if state.workflow_enabled is not true and not state.outcome %}
+        {% if interview.topic_mode %}
+          <p class="text-body-secondary">The assistant explores requirements by topic and decides when it has enough information. Required readiness checks still apply.</p>
+        {% endif %}
+        {% if prompt.kind == "requirements_interview" %}
+          <form method="post" action="{{ url('session') }}" class="mb-4">
+            {{ csrf_input }}<input type="hidden" name="action" value="answer-interview">
+            {% if prompt.options %}
+              <fieldset class="mb-3">
+                <legend class="fs-6">{{ prompt.message }}</legend>
+                <div class="d-flex flex-wrap gap-2">
+                  {% for option in prompt.options %}
+                    <input class="btn-check" type="{{ 'checkbox' if prompt.multiple else 'radio' }}" name="answer" id="interview-choice-{{ loop.index }}" value="{{ option.value }}" autocomplete="off" {% if not prompt.multiple and loop.first %}required{% endif %}>
+                    <label class="btn btn-outline-primary" for="interview-choice-{{ loop.index }}">{{ option.label }}</label>
+                  {% endfor %}
+                </div>
+              </fieldset>
+              {% for error in answer_form.answer.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              <button class="btn btn-primary mt-2" type="submit">Continue</button>
+            {% else %}
+              <label class="form-label" for="id_answer">Your answer</label>
+              {{ answer_form.answer }}
+              {% for error in answer_form.answer.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              <button class="btn btn-primary mt-3" type="submit">Send answer</button>
+            {% endif %}
+          </form>
+        {% elif interview.suggestion_selection_pending %}
+          <div class="border rounded p-3 mb-4">
+            <h3 class="h5">Optional model-suggested questions</h3>
+            <p class="text-body-secondary">These questions are optional and do not satisfy requirements readiness checks.</p>
+            <form method="post" action="{{ url('session') }}">
+              {{ csrf_input }}<input type="hidden" name="action" value="select-suggestions">
+              {% for question in interview.suggested_questions %}
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" name="question_ids" value="{{ loop.index0 }}" id="suggestion-{{ loop.index0 }}">
+                  <label class="form-check-label" for="suggestion-{{ loop.index0 }}">{{ question }}</label>
+                </div>
+              {% endfor %}
+              <button class="btn btn-primary" type="submit">Answer selected questions</button>
+            </form>
+          </div>
+        {% elif interview.supplemental_pending_questions %}
+          <form method="post" action="{{ url('session') }}" class="mb-4">
+            {{ csrf_input }}<input type="hidden" name="action" value="answer-supplemental">
+            <label class="form-label" for="id_supplemental_answer">Your optional answer</label>
+            <textarea class="form-control mb-3" id="id_supplemental_answer" name="answer" rows="3" maxlength="20000"></textarea>
+            <button class="btn btn-primary" type="submit">Send optional answer</button>
+          </form>
+        {% endif %}
+
+        {% if interview.ai_assistance_enabled %}
+          <form method="post" action="{{ url('session') }}" class="border-top pt-3">
+            {{ csrf_input }}<input type="hidden" name="action" value="chat-interview">
+            <label class="form-label" for="id_question">Ask the assistant a question</label>
+            {{ chat_form.question }}
+            {% for error in chat_form.question.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            <button class="btn btn-outline-primary mt-2" type="submit">Ask</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url('session') }}" class="border-top pt-3">
+            {{ csrf_input }}<button class="btn btn-outline-secondary btn-sm" name="action" value="enable-assistance" type="submit">Opt in to a topic-based interview</button>
+            <p class="form-text mb-0">After you opt in and approve any required disclosure, the configured provider will receive your interview context and choose follow-up topics until it determines there is enough information.</p>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
+
+{% if phase == "requirements_review" %}
   <div class="card mb-4"><div class="card-body">
     <h2 class="h4">Review requirements</h2>
     <p>{{ prompt.message }}</p>

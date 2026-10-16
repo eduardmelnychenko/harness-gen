@@ -14,6 +14,7 @@ from harness_gen.artifacts import GeneratedFile, GenerationResult
 from harness_gen.config import ProviderSettings
 from harness_gen.errors import HarnessError
 from harness_gen.generation import plan_generation
+from harness_gen.interview_assistance import TopicInterviewTurn
 from harness_gen.requirements import RequirementsDraft
 from harness_gen.sessions import DatabaseSettings, SessionManager
 from harness_gen.targets import ArtifactKind
@@ -25,12 +26,15 @@ from harness_gen.webapp.views import _resolve_destination
 
 
 class _FixedGenerator:
+    last_requirements: RequirementsDraft | None = None
+
     def generate(
         self,
         requirements: RequirementsDraft,
         provider_settings: ProviderSettings,
         approval: object,
     ) -> GenerationResult:
+        type(self).last_requirements = requirements
         plan = plan_generation(requirements)
         confirmed = "\n".join(confirmed_details(requirements))
         files = []
@@ -102,6 +106,7 @@ class WebApplicationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Create harness instructions")
         self.assertContains(response, "Start requirements interview")
+        self.assertContains(response, "sticky-top")
 
     def test_starting_session_opens_deterministic_interview_in_browser(self) -> None:
         self.client.force_login(self.user)
@@ -123,11 +128,197 @@ class WebApplicationTests(TestCase):
                 response = self.client.get("/session/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Interview chat")
+        self.assertContains(response, "shared with the operator")
+        self.assertContains(response, "Create clear instructions for the team.")
         self.assertContains(response, "What is the main purpose of the harness?")
         self.assertContains(response, "Your answer")
 
+    def test_fixed_interview_answers_use_clickable_choices(self) -> None:
+        self.client.force_login(self.user)
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "checkpoint.sqlite3"
+            with patch.dict(
+                os.environ,
+                {
+                    "HARNESS_DB_URL": f"sqlite:///{database}",
+                    "HARNESS_WORKSPACE_ROOT": str(Path(directory) / "workspaces"),
+                },
+            ):
+                response = self.client.post(
+                    "/",
+                    {"request": "Create instructions for a data analysis team."},
+                )
+                self.assertRedirects(response, "/session/")
+
+                response = self.client.post(
+                    "/session/",
+                    {
+                        "action": "answer-interview",
+                        "answer": "Create clear instructions for this work.",
+                    },
+                )
+                self.assertContains(response, 'type="checkbox"')
+                self.assertContains(response, 'value="1"')
+                self.assertContains(response, "Other/custom")
+                self.assertNotContains(response, 'id="id_answer"')
+
+                response = self.client.post(
+                    "/session/",
+                    {
+                        "action": "answer-interview",
+                        "answer": ["1", "3", "4"],
+                    },
+                )
+                self.assertContains(response, "Choose the agent target.")
+                self.assertContains(response, 'type="radio"')
+                self.assertContains(response, "GitHub Copilot")
+                self.assertNotContains(response, 'id="id_answer"')
+
+                response = self.client.post(
+                    "/session/",
+                    {"action": "answer-interview", "answer": "Ollama"},
+                )
+                self.assertContains(
+                    response,
+                    "That name is an LLM provider, not an agent target.",
+                )
+                self.assertContains(response, "Choose the agent target.")
+
+                response = self.client.post(
+                    "/session/",
+                    {"action": "answer-interview", "answer": "2"},
+                )
+                self.assertContains(response, "Your answer")
+
+                for answer in (
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                ):
+                    response = self.client.post(
+                        "/session/",
+                        {"action": "answer-interview", "answer": answer},
+                    )
+
+                self.assertContains(response, "Can the clarified custom task")
+                self.assertContains(response, "Unsure")
+                self.assertNotContains(response, 'id="id_answer"')
+
+                response = self.client.post(
+                    "/session/",
+                    {"action": "answer-interview", "answer": "unsure"},
+                )
+                self.assertContains(response, "Create separate task-type instruction files?")
+                self.assertContains(response, "Yes")
+                self.assertContains(response, "No")
+                self.assertNotContains(response, 'id="id_answer"')
+
+                response = self.client.post(
+                    "/session/",
+                    {"action": "answer-interview", "answer": "no"},
+                )
+                self.assertContains(response, "Create path-scoped instruction files?")
+                self.assertContains(response, "Yes")
+                self.assertContains(response, "No")
+                self.assertNotContains(response, 'id="id_answer"')
+
+    def test_topic_interview_cannot_stop_before_data_science_readiness(self) -> None:
+        self.client.force_login(self.user)
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "checkpoint.sqlite3"
+            with patch.dict(
+                os.environ,
+                {
+                    "HARNESS_DB_URL": f"sqlite:///{database}",
+                    "HARNESS_WORKSPACE_ROOT": str(Path(directory) / "workspaces"),
+                },
+            ):
+                self.client.post(
+                    "/",
+                    {"request": "Analyze the customer dataset."},
+                )
+                response = self.client.post(
+                    "/session/",
+                    {"action": "enable-assistance"},
+                )
+                self.assertContains(
+                    response,
+                    "Select one or more task types.",
+                )
+                self.assertNotContains(
+                    response,
+                    "What is the main purpose of the harness?",
+                )
+                with patch(
+                    "harness_gen.webapp.services.InterviewAssistant.interview_topic",
+                    return_value=TopicInterviewTurn(
+                        sufficient=True,
+                        next_question=None,
+                        extracted_requirements=[],
+                        unresolved_choices=[],
+                    ),
+                ):
+                    for answer in ("3", "2"):
+                        response = self.client.post(
+                            "/session/",
+                            {"action": "answer-interview", "answer": answer},
+                        )
+
+        self.assertContains(response, "Which data source will the analysis use?")
+        self.assertNotContains(response, "Review requirements")
+
+    def test_legacy_interview_checkpoint_renders_reconstructed_chat_history(self) -> None:
+        self.client.force_login(self.user)
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "checkpoint.sqlite3"
+            with patch.dict(
+                os.environ,
+                {
+                    "HARNESS_DB_URL": f"sqlite:///{database}",
+                    "HARNESS_WORKSPACE_ROOT": str(Path(directory) / "workspaces"),
+                },
+            ):
+                with SessionManager(
+                    DatabaseSettings.from_environment(),
+                    owner_id=str(self.user.pk),
+                ) as manager:
+                    manager.start(
+                        {
+                            "request": "Create instructions for a service.",
+                            "interview_data": {
+                                "answers": {"purpose": "Preserve API behavior."},
+                                "fields": ["purpose", "task_types"],
+                                "index": 1,
+                                "pending_field": "task_types",
+                                "complete": False,
+                            },
+                        }
+                    )
+
+                response = self.client.get("/session/")
+
+        self.assertContains(response, "Interview chat")
+        self.assertContains(response, "Create instructions for a service.")
+        self.assertContains(response, "What is the main purpose of the harness?")
+        self.assertContains(response, "Preserve API behavior.")
+
     def test_completed_interview_opens_review_and_edit_pages(self) -> None:
         self.client.force_login(self.user)
+        _FixedGenerator.last_requirements = None
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / "checkpoint.sqlite3"
             with patch.dict(
@@ -148,28 +339,105 @@ class WebApplicationTests(TestCase):
                         "/",
                         {"request": "Create accurate instructions for an API team."},
                     )
-                    answers = (
-                        "Preserve the public API.",
-                        "1",
-                        "2",
-                        "",
-                        "",
-                        "Unit tests",
-                        "",
-                        "",
-                        "Maintain API compatibility.",
-                        "Python",
-                        "Unit tests",
-                        "",
-                        "n",
-                        "n",
-                    )
-                    for answer in answers:
+                    with patch(
+                        "harness_gen.webapp.services.InterviewAssistant.answer_question",
+                        return_value="Use the confirmed requirements as the source of truth.",
+                    ) as answer_question:
                         response = self.client.post(
                             "/session/",
-                            {"action": "answer-interview", "answer": answer},
+                            {
+                                "action": "chat-interview",
+                                "question": "How should I handle open choices?",
+                            },
                         )
-                        self.assertEqual(response.status_code, 200)
+                        self.assertContains(
+                            response,
+                            "Enable interview assistance before requesting model help.",
+                        )
+                        answer_question.assert_not_called()
+
+                        response = self.client.post(
+                            "/session/",
+                            {"action": "enable-assistance"},
+                        )
+                        self.assertContains(response, "Ask the assistant a question")
+                        response = self.client.post(
+                            "/session/",
+                            {
+                                "action": "chat-interview",
+                                "question": "How should I handle open choices?",
+                            },
+                        )
+                        self.assertContains(
+                            response,
+                            "How should I handle open choices?",
+                        )
+                        self.assertContains(
+                            response,
+                            "Use the confirmed requirements as the source of truth.",
+                        )
+                        answer_question.assert_called_once()
+                        response = self.client.post(
+                            "/session/",
+                            {"action": "pause"},
+                        )
+                        self.assertContains(
+                            response,
+                            "Use the confirmed requirements as the source of truth.",
+                        )
+
+                    with patch(
+                        "harness_gen.webapp.services.InterviewAssistant.interview_topic",
+                        side_effect=(
+                            TopicInterviewTurn(
+                                sufficient=False,
+                                next_question=(
+                                    "Which important workflow must the harness support?"
+                                ),
+                                extracted_requirements=[
+                                    {
+                                        "key": "workflows",
+                                        "value": "Maintain API compatibility.",
+                                    },
+                                    {"key": "runtime", "value": "Python"},
+                                    {"key": "verification", "value": "Unit tests"},
+                                ],
+                                unresolved_choices=[],
+                            ),
+                            TopicInterviewTurn(
+                                sufficient=True,
+                                next_question=None,
+                                extracted_requirements=[],
+                                unresolved_choices=[],
+                            ),
+                        ),
+                    ) as interview_topic:
+                        for answer in ("1", "2"):
+                            response = self.client.post(
+                                "/session/",
+                                {"action": "answer-interview", "answer": answer},
+                            )
+                            self.assertEqual(response.status_code, 200)
+                        response = self.client.post(
+                            "/session/",
+                            {"action": "pause"},
+                        )
+                        self.assertContains(
+                            response,
+                            "Which important workflow must the harness support?",
+                        )
+                        response = self.client.get("/session/")
+                        self.assertContains(
+                            response,
+                            "Which important workflow must the harness support?",
+                        )
+                        for answer in ("Maintain API compatibility.", "n", "n"):
+                            response = self.client.post(
+                                "/session/",
+                                {"action": "answer-interview", "answer": answer},
+                            )
+                            self.assertEqual(response.status_code, 200)
+                        interview_topic.assert_called()
 
                     response = self.client.get("/session/")
                     self.assertContains(response, "Review requirements")
@@ -231,6 +499,21 @@ class WebApplicationTests(TestCase):
                         (project / ".github" / "copilot-instructions.md").is_file()
                     )
 
+        self.assertIsNotNone(_FixedGenerator.last_requirements)
+        transcript = _FixedGenerator.last_requirements.interview_conversation
+        self.assertTrue(
+            any(
+                item.content == "How should I handle open choices?"
+                for item in transcript
+            )
+        )
+        self.assertTrue(
+            any(
+                item.content
+                == "Use the confirmed requirements as the source of truth."
+                for item in transcript
+            )
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_provider_api_key_is_encrypted_at_rest(self) -> None:

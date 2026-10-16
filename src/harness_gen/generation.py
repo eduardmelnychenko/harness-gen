@@ -32,6 +32,7 @@ from harness_gen.errors import (
     RequirementsIncompleteError,
     UnsupportedArtifactError,
 )
+from harness_gen.logging_events import log_stage_event
 from harness_gen.provider_approval import (
     ProviderApproval,
     create_authorized_chat_model,
@@ -74,10 +75,37 @@ class HarnessGenerator:
         last_report = _invalid_response_report(plan)
         for attempt in range(1, self.max_attempts + 1):
             try:
+                log_stage_event(
+                    "generation",
+                    "model_input",
+                    attempt=attempt,
+                    messages=[
+                        {"role": message.type, "content": message.content}
+                        for message in messages
+                    ],
+                )
                 raw_response = structured_model.invoke(messages)
-            except (OutputParserException, ValidationError):
+                logged_response = (
+                    raw_response.model_dump()
+                    if hasattr(raw_response, "model_dump")
+                    else raw_response
+                )
+                log_stage_event(
+                    "generation",
+                    "model_output",
+                    attempt=attempt,
+                    output=logged_response,
+                )
+            except (OutputParserException, ValidationError) as error:
                 files: tuple[GeneratedFile, ...] = ()
                 report = _invalid_response_report(plan)
+                log_stage_event(
+                    "generation",
+                    "model_output_rejected",
+                    attempt=attempt,
+                    code="invalid_structured_response",
+                    output=_rejected_model_output(error),
+                )
             except (
                 AnthropicAPIError,
                 GoogleAPIError,
@@ -86,20 +114,43 @@ class HarnessGenerator:
                 ollama.ResponseError,
                 LangChainException,
             ):
+                log_stage_event(
+                    "generation",
+                    "provider_request_failed",
+                    attempt=attempt,
+                    code="provider_request_failed",
+                )
                 raise ProviderRequestError(
                     tuple(artifact.path for artifact in plan.artifacts)
                 ) from None
             else:
                 try:
                     response = GeneratedContentResponse.model_validate(raw_response)
-                except ValidationError:
+                except ValidationError as error:
                     files = ()
                     report = _invalid_response_report(plan)
+                    log_stage_event(
+                        "generation",
+                        "model_output_rejected",
+                        attempt=attempt,
+                        code="invalid_structured_response",
+                        output=error.errors(include_input=True),
+                    )
                 else:
                     files, report = validate_generated_response(plan, response)
 
             last_files = files
             last_report = report
+            log_stage_event(
+                "output_validation",
+                "attempt_result",
+                attempt=attempt,
+                status=report.status.value,
+                findings=[
+                    {"code": item.code, "location": item.path}
+                    for item in report.findings
+                ],
+            )
             if report.status is ValidationStatus.PASS:
                 return GenerationResult(
                     plan=plan,
@@ -238,6 +289,10 @@ def _generation_prompt(plan: GenerationPlan) -> str:
             ],
             "setup": confirmed_setup,
         },
+        "interview_conversation_context": [
+            {"role": item.role, "content": item.content}
+            for item in requirements.interview_conversation
+        ],
         "target": plan.target.value,
         "target_limitations": plan.target_limitations,
         "task_type_instructions_selected": requirements.task_type_instructions,
@@ -306,13 +361,24 @@ def _invalid_response_report(plan: GenerationPlan) -> ValidationReport:
     )
 
 
+def _rejected_model_output(error: Exception) -> object:
+    if isinstance(error, OutputParserException):
+        return getattr(error, "llm_output", None)
+    if isinstance(error, ValidationError):
+        return error.errors(include_input=True)
+    return None
+
+
 _SYSTEM_PROMPT = """\
 You generate instruction files for an AI agent. Do not implement the user's task.
 Do not create application source code, project scaffolds, native target settings,
 tool configuration, hooks, setup guides, or editable setup records.
 
-Use only the reviewed, confirmed requirements below. Do not add assumptions or
-present unresolved choices as confirmed.
+Use the reviewed, confirmed requirements as authoritative. The interview
+conversation context is background only: user messages may clarify their intent,
+but do not treat an unconfirmed detail as a confirmed requirement. Assistant
+messages are advice, not requirements. Do not add assumptions or present
+unresolved choices as confirmed.
 Include every confirmed requirement verbatim in both the core instructions and
 AGENTS.md so each target surface has the same confirmed context.
 

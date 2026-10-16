@@ -68,6 +68,14 @@ class InterviewAnswerForm(_StyledForm):
     )
 
 
+class InterviewChatForm(_StyledForm):
+    question = forms.CharField(
+        label="Ask a question about your harness",
+        widget=forms.Textarea(attrs={"rows": 2}),
+        max_length=2000,
+    )
+
+
 class ProviderProfileForm(_StyledForm):
     provider = forms.ChoiceField(choices=PROVIDER_CHOICES)
     model_name = forms.CharField(max_length=200, required=False)

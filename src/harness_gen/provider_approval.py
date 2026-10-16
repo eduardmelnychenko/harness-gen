@@ -25,6 +25,8 @@ _DATA_CATEGORIES = (
     "the initial request",
     "selected choices",
     "follow-up answers",
+    "interview questions and answers",
+    "your questions and the model's replies",
     "confirmed setup details",
 )
 _DISPLAY_NAMES = {

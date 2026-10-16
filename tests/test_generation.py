@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+import json
+import logging
+import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 
 import httpx
 
@@ -13,9 +18,12 @@ from harness_gen.errors import (
     RequirementsIncompleteError,
 )
 from harness_gen.generation import HarnessGenerator, plan_generation
+from harness_gen.logging_config import configure_logging
+from harness_gen.logging_events import web_logging_scope
 from harness_gen.provider_approval import ProviderApproval
 from harness_gen.requirements import (
     ConfirmedPathPattern,
+    InterviewMessage,
     RequirementValue,
     RequirementsDraft,
     SupplementalAnswer,
@@ -121,6 +129,12 @@ def _response(plan: GenerationPlan, *, missing_detail: str | None = None) -> dic
 
 
 class GenerationTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        logger = logging.getLogger("harness_gen")
+        for handler in tuple(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+
     def test_plans_exact_target_native_paths(self) -> None:
         plan = plan_generation(_requirements())
 
@@ -172,6 +186,37 @@ class GenerationTests(unittest.TestCase):
             path_file.content.startswith(plan.artifacts[-1].frontmatter)
         )
 
+    def test_web_stage_log_records_generation_output_and_validation_locations(
+        self,
+    ) -> None:
+        requirements = _requirements()
+        plan = plan_generation(requirements)
+        model = FakeChatModel(
+            [_response(plan, missing_detail="Use Python 3.14.")]
+        )
+        settings = ProviderSettings.from_environment({})
+        generator = HarnessGenerator(
+            model_factory=lambda _settings, _requirements, _approval: model,
+            max_attempts=1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = configure_logging(
+                log_directory=Path(directory) / "logs",
+                run_started_at=datetime(2026, 10, 13, 11, 28, 41),
+            )
+
+            with web_logging_scope():
+                result = generator.generate(requirements, settings, None)
+
+            self.assertFalse(result.writable)
+            content = log_path.read_text(encoding="utf-8")
+            self.assertIn('"stage": "generation"', content)
+            self.assertIn('"event": "model_output"', content)
+            self.assertIn("Build a safe service harness.", content)
+            self.assertIn('"stage": "output_validation"', content)
+            self.assertIn('"code": "missing_confirmed_detail"', content)
+            self.assertIn('"location": ".github/copilot-instructions.md"', content)
+
     def test_core_prompt_keeps_task_types_when_separate_files_are_not_selected(
         self,
     ) -> None:
@@ -188,6 +233,51 @@ class GenerationTests(unittest.TestCase):
         self.assertTrue(result.writable)
         self.assertEqual(len(result.files), 3)
         self.assertIn("Software development", model.runnable.calls[0][1].content)
+
+    def test_generation_includes_full_chat_as_separate_context(self) -> None:
+        requirements = replace(
+            _requirements(),
+            interview_conversation=(
+                InterviewMessage("user", "Can the harness cover API version 2?"),
+                InterviewMessage(
+                    "assistant",
+                    "Include version 2 if the team confirms it.",
+                ),
+            ),
+        )
+        plan = plan_generation(requirements)
+        model = FakeChatModel([_response(plan)])
+        settings = ProviderSettings.from_environment({})
+        generator = HarnessGenerator(
+            model_factory=lambda _settings, _requirements, _approval: model
+        )
+
+        result = generator.generate(requirements, settings, None)
+
+        self.assertTrue(result.writable)
+        prompt = model.runnable.calls[0][1].content
+        context = json.loads(prompt.split("\n\n", maxsplit=1)[1])
+        self.assertEqual(
+            context["interview_conversation_context"],
+            [
+                {
+                    "role": "user",
+                    "content": "Can the harness cover API version 2?",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Include version 2 if the team confirms it.",
+                },
+            ],
+        )
+        self.assertNotIn(
+            "interview_conversation_context",
+            context["confirmed_requirements"],
+        )
+        self.assertIn(
+            "Assistant\nmessages are advice, not requirements.",
+            model.runnable.calls[0][0].content,
+        )
 
     def test_retries_incomplete_files_and_returns_only_after_pass(self) -> None:
         requirements = _requirements()

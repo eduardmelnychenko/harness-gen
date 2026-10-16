@@ -20,9 +20,17 @@ an isolated workspace.
 - Shared `AGENTS.md` context alongside target-specific instruction files.
 
 The target agent determines file formats. The model provider is configured
-separately for each account. Optional interview assistance is disabled until
-you opt in; the application discloses provider use and asks for approval before
-it sends interview or generation content to an external provider.
+separately for each account. The requirements interview is a saved chat that
+shows the request, questions, and answers. Model assistance is disabled until
+you opt in. After you choose the task type and target, the model can explore
+requirements by topic and decide when it has enough information; required
+readiness checks still apply. You can also ask related questions in the chat.
+Predefined interview answers use clickable choices, while open-ended questions
+use text responses. The shared navigation header stays visible while you scroll.
+The full conversation is included as separate context during generation, while
+reviewed requirements remain authoritative. The application discloses provider
+use and asks for approval before it sends interview or generation content to an
+external provider.
 
 ## Requirements and setup
 
@@ -95,6 +103,15 @@ External providers receive session content only after the user approves the
 disclosure. The app does not verify provider retention practices; review the
 provider's terms. Deleting a session removes checkpoint records but does not
 guarantee secure erasure from storage media.
+
+The web application also records interview text, model inputs and outputs, and
+validation results with finding codes and artifact locations in a shared
+operator log under `logs/`. Log files are restricted to the application
+operator, but are not separated by account and are not removed when a session
+is deleted. The application does not scan arbitrary user text for secrets, so
+do not enter passwords, API keys, or other secret values. The configured
+provider credential is not written to the log. There is no automatic log
+retention or deletion policy; the operator must manage these files.
 
 Generated files are written on the application host. The app creates a
 workspace under `HARNESS_WORKSPACE_ROOT/<account-id>` and only allows project

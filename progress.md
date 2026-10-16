@@ -92,3 +92,38 @@
 - Added the `c4-architecture-diagrams` feature record; the diagrams are indexed by `docs/architecture-diagrams.md`.
 - Validation: Python XML parsing confirmed all three draw.io files are valid XML with unique cell IDs and valid cell references; all three documented diagram paths exist.
 - Not run: visual rendering or interaction/layout inspection because a draw.io renderer was not available.
+
+## 2026-10-15
+
+### Checkpointed web interview chat
+
+- Replaced the web interview's single-question presentation with an ordered chat transcript containing the initial request, deterministic questions and answers, selected optional questions and answers, and user/LLM exchanges. Legacy active interviews reconstruct their visible deterministic history from saved answers.
+- Added opt-in contextual LLM chat while preserving provider disclosure and external-provider approval. The transcript is persisted in the existing checkpoint and passed separately to generation as contextual, non-authoritative input; reviewed requirements remain authoritative.
+- Updated the session UI, provider data disclosure, product/architecture/README documentation, and feature inventory.
+- Validation: all 105 unit tests and all 10 Django web tests passed; Python compilation, `feature_list.json` JSON parsing, Django system checks, and `git diff --check` passed.
+- Not run: live provider requests; validation used offline tests and a mocked interview response.
+
+### Topic-based requirements interview
+
+- Added structured, validated topic-interview turns. After explicit task type and target choices, an opted-in model selects the next topic/question, extracts only supported user-stated requirements, and decides when the conversation is sufficient. Existing material-readiness checks can override a premature completion assessment and require a focused follow-up.
+- Kept provider disclosure and approval, the ordered checkpointed transcript, the no-opt-in deterministic fallback, and explicit output-selection choices. Updated the session UI, product/architecture/README documentation, and feature evidence.
+- Added tests for structured turn validation, topic extraction, the data-science readiness safeguard, and the full web interview path.
+- Validation: 107 unit tests and 11 Django web tests passed; Python compilation, Django system checks, and `git diff --check` passed.
+- Not run: live provider requests.
+
+### Clickable interview choices and sticky navigation
+
+- Replaced typed responses for fixed-answer web interview prompts with labelled Bootstrap checkbox/radio controls. Task type remains multi-select; target, yes/no, and custom-task support are single-select. Existing answer validation and readiness gates remain in place. Made the shared navbar sticky across the web app.
+- Updated the product, architecture, README, and feature evidence. Added web coverage for choice rendering, multi-select answers, target validation, yes/no/custom-support options, and sticky navigation.
+- Validation: all 12 web application tests passed with `uv run python manage.py test harness_gen.webapp`; `uv run harness-gen-web check` passed. The first pytest invocation used the system Python and could not import project dependencies; `pytest` is not installed in the project environment.
+- Not run: the full unit suite or live provider requests.
+
+## 2026-10-16
+
+### Stage-level web logging
+
+- Added a per-process operator-only web log under `logs/`, with mode `0700` on the log directory and `0600` on log files. Content-bearing records are enabled only within authenticated web-session handling; the legacy CLI does not emit raw stage content.
+- Logged interview requests, answers, questions, model prompts/responses, generated model output, validation statuses/finding codes/artifact locations, and stage error codes. Configured provider credential fields are not included in log records.
+- Updated authenticated-page notices, README, product and architecture requirements, and `feature_list.json` to explain shared-log access, retention, and the risk that user-entered secrets can appear because arbitrary text is not scanned or redacted.
+- Validation: all 112 unit tests and 12 Django web tests passed; Python compilation, feature inventory JSON parsing, Django system checks, permission tests, and `git diff --check` passed.
+- Not run: live provider requests.

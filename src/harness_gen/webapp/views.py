@@ -17,10 +17,12 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from harness_gen.errors import HarnessError, RequirementsError
+from harness_gen.logging_events import log_stage_event
 from harness_gen.requirements import requirements_from_state
 from harness_gen.sessions import SessionManager
 from harness_gen.webapp.forms import (
     InterviewAnswerForm,
+    InterviewChatForm,
     ProviderProfileForm,
     RequirementsEditForm,
     StartSessionForm,
@@ -29,7 +31,7 @@ from harness_gen.webapp.models import get_provider_profile
 from harness_gen.webapp.services import (
     answer_interview,
     answer_supplemental,
-    coach_interview,
+    chat_interview,
     ensure_interview_prompt,
     request_suggestions,
     session_manager,
@@ -107,6 +109,11 @@ def home(request: HttpRequest) -> HttpResponse:
                             }
                         )
                         _LOGGER.info("Browser session started")
+                        log_stage_event(
+                            "requirements_interview",
+                            "initial_request",
+                            text=request_text,
+                        )
                         ensure_interview_prompt(manager)
                         return redirect("session")
             return _render(
@@ -115,6 +122,12 @@ def home(request: HttpRequest) -> HttpResponse:
                 {"form": form, "state": state, "provider": manager.provider_settings},
             )
     except HarnessError as error:
+        log_stage_event(
+            "web_request",
+            "failed",
+            code="browser_home_request_failed",
+            error_type=type(error).__name__,
+        )
         _LOGGER.error("Browser home request failed (%s)", type(error).__name__)
         messages.error(request, str(error))
         return redirect("provider-settings")
@@ -167,6 +180,12 @@ def session_view(request: HttpRequest) -> HttpResponse:
                     DjangoValidationError,
                     ValueError,
                 ) as error:
+                    log_stage_event(
+                        "web_session_action",
+                        "failed",
+                        code="browser_session_action_failed",
+                        error_type=type(error).__name__,
+                    )
                     _LOGGER.warning(
                         "Browser session action failed (%s)", type(error).__name__
                     )
@@ -192,14 +211,7 @@ def session_view(request: HttpRequest) -> HttpResponse:
                     )
                 if extra.get("redirect"):
                     return redirect(str(extra["redirect"]))
-            interview = state.get("interview_data")
-            interview_state = interview if isinstance(interview, Mapping) else {}
-            if (
-                state.get("workflow_enabled") is not True
-                and state.get("pending_prompt") is None
-                and interview_state.get("suggestion_selection_pending") is not True
-                and not interview_state.get("supplemental_pending_questions")
-            ):
+            if state.get("workflow_enabled") is not True:
                 state = ensure_interview_prompt(manager)
             return _render(
                 request,
@@ -208,10 +220,17 @@ def session_view(request: HttpRequest) -> HttpResponse:
                     **_session_context(state),
                     **extra,
                     "answer_form": InterviewAnswerForm(),
+                    "chat_form": extra.get("chat_form", InterviewChatForm()),
                     "workspace_choices": _workspace_choices(request.user),
                 },
             )
     except HarnessError as error:
+        log_stage_event(
+            "web_session",
+            "failed",
+            code="browser_session_request_failed",
+            error_type=type(error).__name__,
+        )
         _LOGGER.error("Browser session request failed (%s)", type(error).__name__)
         messages.error(request, str(error))
         return redirect("provider-settings")
@@ -224,22 +243,52 @@ def _handle_session_action(
     action: str,
 ) -> tuple[HarnessWorkflowState, dict[str, object]]:
     if action == "answer-interview":
-        form = InterviewAnswerForm(request.POST)
+        form_data = request.POST.copy()
+        answers = request.POST.getlist("answer")
+        if len(answers) > 1:
+            form_data["answer"] = ", ".join(answers)
+        form = InterviewAnswerForm(form_data)
         if not form.is_valid():
             return state, {"answer_form": form}
         answer_interview(manager, str(form.cleaned_data["answer"]))
         return manager.state(), {}
+    if action == "chat-interview":
+        form = InterviewChatForm(request.POST)
+        if not form.is_valid():
+            return state, {"chat_form": form}
+        state = chat_interview(
+            manager,
+            str(form.cleaned_data["question"]),
+        )
+        return state, {"chat_form": InterviewChatForm()}
     if action == "enable-assistance":
-        manager.resume(":ai")
+        if state.get("pending_prompt") is not None:
+            manager.resume(":ai")
         state, disclosure = set_interview_assistance(manager, approved=False)
         if disclosure:
             return state, {"disclosure": disclosure}
+        interview = state.get("interview_data")
+        if not isinstance(interview, Mapping):
+            interview = {}
+        if (
+            interview.get("suggestion_selection_pending") is True
+            or interview.get("supplemental_pending_questions")
+        ):
+            return state, {}
         return ensure_interview_prompt(manager), {}
     if action == "approve-interview-provider":
         state, disclosure = set_interview_assistance(manager, approved=True)
         if disclosure:
             raise HarnessError("Provider approval could not be recorded.")
         messages.success(request, "Interview assistance is enabled for this session.")
+        interview = state.get("interview_data")
+        if not isinstance(interview, Mapping):
+            interview = {}
+        if (
+            interview.get("suggestion_selection_pending") is True
+            or interview.get("supplemental_pending_questions")
+        ):
+            return state, {}
         return ensure_interview_prompt(manager), {}
     if action == "suggest-questions":
         manager.resume(":suggest")
@@ -254,8 +303,8 @@ def _handle_session_action(
             request.POST.get("answer", ""),
         ), {}
     if action == "coach":
-        advice = coach_interview(manager, request.POST.get("question", ""))
-        return state, {"coaching": advice}
+        state = chat_interview(manager, request.POST.get("question", ""))
+        return state, {}
     if action == "requirements-edit":
         return state, {
             "edit_form": RequirementsEditForm(state=state["requirements"])
@@ -306,6 +355,15 @@ def _session_context(state: HarnessWorkflowState) -> dict[str, object]:
     interview = state.get("interview_data")
     if not isinstance(interview, Mapping):
         interview = {}
+    conversation = interview.get("conversation", [])
+    if not isinstance(conversation, list):
+        conversation = []
+    if not conversation:
+        requirements = state.get("requirements")
+        if isinstance(requirements, Mapping):
+            saved_conversation = requirements.get("interview_conversation", [])
+            if isinstance(saved_conversation, list):
+                conversation = saved_conversation
     blockers = prompt.get("blockers", [])
     if not isinstance(blockers, list):
         blockers = []
@@ -323,6 +381,7 @@ def _session_context(state: HarnessWorkflowState) -> dict[str, object]:
         "prompt": prompt,
         "phase": state.get("phase", ""),
         "interview": interview,
+        "conversation": conversation,
         "error_message": state.get("error_message", ""),
         "generated_files": state.get("generated_files", []),
         "review_summary": state.get("review_summary", []),
